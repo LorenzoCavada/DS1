@@ -25,16 +25,13 @@ class DB extends AbstractActor {
 
   /* -- Actor constructor --------------------------------------------------- */
 
-  public DB(Dictionary<Integer, Integer> items) {
+  public DB(HashMap<Integer, Integer> items) {
 
     this.items=new HashMap<>();
-    while(items.keys().hasMoreElements()){
-      Integer curKey = items.keys().nextElement();
-      this.items.put(curKey, items.get(curKey));
-    }
-  }
+    this.items.putAll(items);
 
-  static public Props props(Dictionary<Integer, Integer> items) {
+  }
+  static public Props props(HashMap<Integer, Integer> items) {
     return Props.create(DB.class, () -> new DB(items));
   }
 
