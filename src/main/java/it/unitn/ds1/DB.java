@@ -14,11 +14,18 @@ class DB extends AbstractActor {
 
   private Dictionary<Integer, Integer> items;
 
+  /* -- Message types ------------------------------------------------------- */
+
+  public static class JoinGroupMsg implements Serializable {
+    private final List<ActorRef> children; // list of children members
+    public JoinGroupMsg(List<ActorRef> children) {
+      this.children=new ArrayList<>(children);
+    }
+  }
+
   /* -- Actor constructor --------------------------------------------------- */
 
-  public DB(List<ActorRef> children, Dictionary<Integer, Integer> items) {
-    this.children=new ArrayList<>();
-    this.children.addAll(children);
+  public DB(Dictionary<Integer, Integer> items) {
 
     this.items=new Hashtable<>();
     while(items.keys().hasMoreElements()){
@@ -27,8 +34,8 @@ class DB extends AbstractActor {
     }
   }
 
-  static public Props props(List<ActorRef> children, Dictionary<Integer, Integer> items) {
-    return Props.create(DB.class, () -> new DB(children, items));
+  static public Props props(Dictionary<Integer, Integer> items) {
+    return Props.create(DB.class, () -> new DB(items));
   }
 
   /* -- Actor behaviour ----------------------------------------------------- */
@@ -44,6 +51,10 @@ class DB extends AbstractActor {
     Integer key = msg.key;
     Messages.RefillMsg resp = new Messages.RefillMsg(key, msg.newValue, msg.originator);
     multicast(resp);
+  }
+
+  private void onJoinGroupMsg(JoinGroupMsg msg) {
+
   }
 
   private void multicast(Serializable m) {
@@ -65,6 +76,7 @@ class DB extends AbstractActor {
     return receiveBuilder()
       .match(Messages.ReadReqMsg.class,    this::onReadReq)
       .match(Messages.WriteReqMsg.class,    this::onWriteReq)
+      .match(JoinGroupMsg.class,    this::onJoinGroupMsg)
       .build();
   }
 }
