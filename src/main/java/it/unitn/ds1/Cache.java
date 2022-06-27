@@ -23,7 +23,7 @@ class Cache extends AbstractActor {
   public static class JoinGroupMsg implements Serializable {
     private final List<ActorRef> children; // list of group members
     private final ActorRef parent;
-    public JoinGroupMsg(List<ActorRef> children, ActorRef parent, Messages.typeCache type) {
+    public JoinGroupMsg(List<ActorRef> children, ActorRef parent) {
       this.children = new ArrayList<>(children);
       this.parent=parent;
     }
