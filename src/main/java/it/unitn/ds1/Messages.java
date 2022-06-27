@@ -6,6 +6,8 @@ import java.io.Serializable;
 import java.util.Stack;
 
 public class Messages {
+
+    public enum typeCache{L1, L2};
     public static class ReadReqMsg implements Serializable {
         public final int key;   // key of requested item
         public Stack<ActorRef> responsePath;
