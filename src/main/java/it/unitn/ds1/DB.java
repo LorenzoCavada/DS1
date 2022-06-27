@@ -53,7 +53,7 @@ class DB extends AbstractActor {
   }
 
   private void onJoinGroupMsg(JoinGroupMsg msg) {
-
+    this.children = msg.children;
   }
 
   private void multicast(Serializable m) {
