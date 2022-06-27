@@ -12,7 +12,7 @@ class DB extends AbstractActor {
   private List<ActorRef> children; // the list of children (L2 caches)
   private final int id = -1;         // ID of the current actor
 
-  private Dictionary<Integer, Integer> items;
+  private HashMap<Integer, Integer> items;
 
   /* -- Message types ------------------------------------------------------- */
 
@@ -27,7 +27,7 @@ class DB extends AbstractActor {
 
   public DB(Dictionary<Integer, Integer> items) {
 
-    this.items=new Hashtable<>();
+    this.items=new HashMap<>();
     while(items.keys().hasMoreElements()){
       Integer curKey = items.keys().nextElement();
       this.items.put(curKey, items.get(curKey));
@@ -40,14 +40,16 @@ class DB extends AbstractActor {
 
   /* -- Actor behaviour ----------------------------------------------------- */
 
-  private void onReadReq(Messages.ReadReqMsg msg){
+  private void onReadReqMsg(Messages.ReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
     Messages.ReadRespMsg resp = new Messages.ReadRespMsg(key, this.items.get(key), msg.responsePath);
+    try { Thread.sleep(rnd.nextInt(10)); }
+    catch (InterruptedException e) { e.printStackTrace(); }
     nextHop.tell(resp, getSelf());
   }
 
-  private void onWriteReq(Messages.WriteReqMsg msg){
+  private void onWriteReqMsg(Messages.WriteReqMsg msg){
     Integer key = msg.key;
     Messages.RefillMsg resp = new Messages.RefillMsg(key, msg.newValue, msg.originator);
     multicast(resp);
@@ -74,8 +76,8 @@ class DB extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(Messages.ReadReqMsg.class,    this::onReadReq)
-      .match(Messages.WriteReqMsg.class,    this::onWriteReq)
+      .match(Messages.ReadReqMsg.class,    this::onReadReqMsg)
+      .match(Messages.WriteReqMsg.class,    this::onWriteReqMsg)
       .match(JoinGroupMsg.class,    this::onJoinGroupMsg)
       .build();
   }
