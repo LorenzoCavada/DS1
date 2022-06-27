@@ -49,7 +49,7 @@ class Client extends AbstractActor {
     System.out.println("Client " + this.id + ";joined;parent = " + msg.parent + ";");
   }
 
-  private void onReadResponseMsg(Messages.ReadRespMsg msg) {
+  private void onReadRespMsg(Messages.ReadRespMsg msg) {
     System.out.println("Client " + this.id + ";ReadResp;key = " + msg.key + ";value = " + msg.value);
   }
 
@@ -57,17 +57,16 @@ class Client extends AbstractActor {
     System.out.println("Client " + this.id + ";WriteConfirm;key = " + msg.key + ";confirmed");
   }
 
-  private void doReadRequest(Integer key){
+  private void doReadReq(Integer key){
     Messages.ReadReqMsg msg = new Messages.ReadReqMsg(key);
     msg.responsePath.push(getSelf());
-
-    parent.tell(msg, getSelf());
+    sendMessage(msg);
     System.out.println("Client " + this.id + ";ReadReq;key = " + msg.key + ";");
   }
 
-  private void doWriteRequest(Integer key, Integer value){
+  private void doWriteReq(Integer key, Integer value){
     Messages.WriteReqMsg msg = new Messages.WriteReqMsg(key, value, getSelf());
-    parent.tell(msg, getSelf());
+    sendMessage(msg);
     System.out.println("Client " + this.id + ";WriteReq;key = " + msg.key + ";value="+msg.newValue);
   }
 
@@ -78,8 +77,14 @@ class Client extends AbstractActor {
   public Receive createReceive() {
     return receiveBuilder()
       .match(JoinGroupMsg.class, this::onJoinGroupMsg)
-      .match(Messages.ReadRespMsg.class, this::onReadResponseMsg)
+      .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
       .match(Messages.WriteConfirmMsg.class, this::onWriteConfirmMsg)
       .build();
+  }
+
+  private void sendMessage(Serializable m){
+    try { Thread.sleep(rnd.nextInt(10)); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    parent.tell(m, getSelf());
   }
 }
