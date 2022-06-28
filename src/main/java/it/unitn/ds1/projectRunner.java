@@ -2,18 +2,11 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
-import akka.actor.Props;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.io.IOException;
-
-import it.unitn.ds1.Chatter.JoinGroupMsg;
-import it.unitn.ds1.Chatter.StartChatMsg;
-import it.unitn.ds1.Chatter.PrintHistoryMsg;
 
 public class projectRunner {
   final private static int N_L1 = 2; // number of L1 caches
@@ -61,13 +54,25 @@ public class projectRunner {
     db.tell(joinDB, ActorRef.noSender());
 
     // associate the parents and children to L1 caches
-    int partitionSize = N_L2 / N_L1;
-    int j = 0;
-    for(int i = 0; i < N_L2; i+= partitionSize){
-      List<ActorRef> children = l2List.subList(i, Math.min(i + partitionSize, N_L2));
-      Cache.JoinGroupMsg joinL1 = new Cache.JoinGroupMsg(children, db);
-      l1List.get(j).tell(joinL1, ActorRef.noSender());
-      j++;
+    int partitionClientSize = N_CLIENT / N_L2;
+    int partitionL2Size = N_L2 / N_L1;
+    List<List<ActorRef>> partitionsClient = new ArrayList<>();
+    List<List<ActorRef>> partitionsL2 = new ArrayList<>();
+
+    for(int i = 0; i < N_CLIENT; i+= partitionClientSize){
+      partitionsClient.add(clientList.subList(i, Math.min(i + partitionClientSize, N_CLIENT)));
+    }
+    for(int i = 0; i < N_L2; i+= partitionL2Size){
+      partitionsL2.add(l2List.subList(i, Math.min(i + partitionL2Size, N_L2)));
+    }
+
+    for(int indexL1=0;indexL1<N_L1;indexL1++){
+      Cache.JoinGroupMsg joinL1=new Cache.JoinGroupMsg(partitionsL2.get(indexL1), db);
+      l1List.get(indexL1).tell(joinL1, ActorRef.noSender());
+    }
+    for(int indexL2=0;indexL2<N_L2;indexL2++){
+      Cache.JoinGroupMsg joinL2=new Cache.JoinGroupMsg(partitionsClient.get(indexL2), l1List.get(indexL2/partitionL2Size));
+      l2List.get(indexL2).tell(joinL2, ActorRef.noSender());
     }
 
 
@@ -75,11 +80,6 @@ public class projectRunner {
       System.out.println(">>> Wait for the chats to stop and press ENTER <<<");
       System.in.read();
 
-      // after chats stop, send actors a message to print their logs
-      PrintHistoryMsg msg = new PrintHistoryMsg();
-      for (ActorRef peer: group) {
-        peer.tell(msg, null);
-      }
       System.out.println(">>> Press ENTER to exit <<<");
       System.in.read();
     } 
