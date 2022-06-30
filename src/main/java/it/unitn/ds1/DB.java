@@ -14,15 +14,6 @@ class DB extends AbstractActor {
 
   private HashMap<Integer, Integer> items;
 
-  /* -- Message types ------------------------------------------------------- */
-
-  public static class JoinGroupMsg implements Serializable {
-    private final List<ActorRef> children; // list of children members
-    public JoinGroupMsg(List<ActorRef> children) {
-      this.children=new ArrayList<>(children);
-    }
-  }
-
   /* -- Actor constructor --------------------------------------------------- */
 
   public DB(HashMap<Integer, Integer> items) {
@@ -52,7 +43,7 @@ class DB extends AbstractActor {
     multicast(resp);
   }
 
-  private void onJoinGroupMsg(JoinGroupMsg msg) {
+  private void onSetChildrenMsg(Messages.SetChildrenMsg msg) {
     this.children = msg.children;
   }
 
@@ -75,7 +66,7 @@ class DB extends AbstractActor {
     return receiveBuilder()
       .match(Messages.ReadReqMsg.class,    this::onReadReqMsg)
       .match(Messages.WriteReqMsg.class,    this::onWriteReqMsg)
-      .match(JoinGroupMsg.class,    this::onJoinGroupMsg)
+      .match(Messages.SetChildrenMsg.class,    this::onSetChildrenMsg)
       .build();
   }
 }

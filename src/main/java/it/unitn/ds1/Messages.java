@@ -3,12 +3,36 @@ package it.unitn.ds1;
 import akka.actor.ActorRef;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Stack;
 
 public class Messages {
 
     // represent the type of the cache, Level 1 or Level 2
     public enum typeCache{L1, L2};
+
+
+    public static class SetChildrenMsg implements Serializable{
+        public List<ActorRef> children;   // key of requested item
+        public SetChildrenMsg(List<ActorRef> children) {
+            this.children=new ArrayList<>(children);
+        }
+    }
+
+    public static class SetAvailableL2Msg implements Serializable{
+        public List<ActorRef> availL2;   // key of requested item
+        public SetAvailableL2Msg(List<ActorRef> availL2) {
+            this.availL2 =new ArrayList<>(availL2);
+        }
+    }
+
+    public static class SetParentMsg implements Serializable{
+        public ActorRef parent;
+        public SetParentMsg(ActorRef parent) {
+            this.parent=parent;
+        }
+    }
 
     // Represent the request of reading the value of the element identify by the key.
     // The responsePath is a stack of actors that represent the path that the request has followed.

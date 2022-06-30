@@ -50,12 +50,12 @@ public class projectRunner {
     }
 
     // associate the L1 caches to the database
-    DB.JoinGroupMsg joinDB = new DB.JoinGroupMsg(l1List);
+    Messages.SetChildrenMsg joinDB = new Messages.SetChildrenMsg(l1List);
     db.tell(joinDB, ActorRef.noSender());
 
-    // associate the parents and children to L1 caches
-    int partitionClientSize = N_CLIENT / N_L2;
-    int partitionL2Size = N_L2 / N_L1;
+    //partition the list of all L2 and all Clients in sets of (N_CLIENT/N_L2) and (N_L2/N_L1) elements
+    int partitionClientSize = (int) Math.ceil( (double)N_CLIENT / (double) N_L2);
+    int partitionL2Size = (int) Math.ceil( (double)N_L2 / (double)N_L1);
     List<List<ActorRef>> partitionsClient = new ArrayList<>();
     List<List<ActorRef>> partitionsL2 = new ArrayList<>();
 
@@ -66,13 +66,23 @@ public class projectRunner {
       partitionsL2.add(l2List.subList(i, Math.min(i + partitionL2Size, N_L2)));
     }
 
+    //we set parent and children of L1 caches
+    //at the same time, we set the L1 cache as parent of the corresponding L2 children
     for(int indexL1=0;indexL1<N_L1;indexL1++){
-      Cache.JoinGroupMsg joinL1=new Cache.JoinGroupMsg(partitionsL2.get(indexL1), db);
-      l1List.get(indexL1).tell(joinL1, ActorRef.noSender());
+      Messages.SetChildrenMsg childL1=new Messages.SetChildrenMsg(partitionsL2.get(indexL1));
+      for(int indexL2=0;indexL2<partitionsL2.get(indexL1).size();indexL2++){
+        Messages.SetParentMsg parentL2=new Messages.SetParentMsg(l1List.get(indexL1));
+        partitionsL2.get(indexL1).get(indexL2).tell(parentL2, ActorRef.noSender());
+      }
+      Messages.SetParentMsg parentL1=new Messages.SetParentMsg(db);
+      l1List.get(indexL1).tell(childL1, ActorRef.noSender());
+      l1List.get(indexL1).tell(parentL1, ActorRef.noSender());
     }
+
+    //finally we set clients as children of L2 caches
     for(int indexL2=0;indexL2<N_L2;indexL2++){
-      Cache.JoinGroupMsg joinL2=new Cache.JoinGroupMsg(partitionsClient.get(indexL2), l1List.get(indexL2/partitionL2Size));
-      l2List.get(indexL2).tell(joinL2, ActorRef.noSender());
+      Messages.SetChildrenMsg childL2=new Messages.SetChildrenMsg(partitionsClient.get(indexL2));
+      l2List.get(indexL2).tell(childL2, ActorRef.noSender());
     }
 
 

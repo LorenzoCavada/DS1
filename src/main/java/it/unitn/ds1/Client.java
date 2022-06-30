@@ -20,18 +20,6 @@ class Client extends AbstractActor {
 
   private List<ActorRef> availableL2; //all the available L2 caches for timeout
 
-  /* -- Message types ------------------------------------------------------- */
-
-  // Start message that informs the client about the L2 caches
-  public static class JoinGroupMsg implements Serializable {
-    private final List<ActorRef> listOfL2; // list of group members
-    private final ActorRef parent;
-    public JoinGroupMsg(List<ActorRef> listOfL2, ActorRef parent) {
-      this.listOfL2 = Collections.unmodifiableList(new ArrayList<>(listOfL2));
-      this.parent=parent;
-    }
-  }
-
   /* -- Actor constructor --------------------------------------------------- */
 
   public Client(int id) {
@@ -43,10 +31,14 @@ class Client extends AbstractActor {
   }
 
   /* -- Actor behaviour ----------------------------------------------------- */
-  private void onJoinGroupMsg(JoinGroupMsg msg) {
-    this.availableL2 = msg.listOfL2;
+  private void onSetParentMsg(Messages.SetParentMsg msg) {
     this.parent=msg.parent;
-    System.out.println("Client " + this.id + ";joined;parent = " + msg.parent + ";");
+    System.out.println("Client " + this.id + ";setParent;parent = " + msg.parent + ";");
+  }
+
+  private void onSetAvailL2Msg(Messages.SetAvailableL2Msg msg) {
+    this.availableL2=msg.availL2;
+    System.out.println("Client " + this.id + ";setListL2;list = " + msg.availL2 + ";");
   }
 
   private void onReadRespMsg(Messages.ReadRespMsg msg) {
@@ -76,7 +68,8 @@ class Client extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(JoinGroupMsg.class, this::onJoinGroupMsg)
+      .match(Messages.SetParentMsg.class, this::onSetParentMsg)
+      .match(Messages.SetAvailableL2Msg.class, this::onSetAvailL2Msg)
       .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
       .match(Messages.WriteConfirmMsg.class, this::onWriteConfirmMsg)
       .build();

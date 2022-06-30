@@ -17,18 +17,6 @@ class Cache extends AbstractActor {
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
-  /* -- Message types ------------------------------------------------------- */
-
-  // Start message that informs every chat participant about its peers
-  public static class JoinGroupMsg implements Serializable {
-    private final List<ActorRef> children; // list of children associated to the cache
-    private final ActorRef parent; // reference to the parent, may be a L1 Cache or the DB
-    public JoinGroupMsg(List<ActorRef> children, ActorRef parent) {
-      this.children = new ArrayList<>(children);
-      this.parent=parent;
-    }
-  }
-
   /* -- Actor constructor --------------------------------------------------- */
 
   public Cache(int id, Messages.typeCache type) {
@@ -59,7 +47,8 @@ class Cache extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(JoinGroupMsg.class, this::onJoinGroupMsg)
+      .match(Messages.SetChildrenMsg.class, this::onSetChildrenMsg)
+      .match(Messages.SetParentMsg.class, this::onSetParentMsg)
       .match(Messages.ReadReqMsg.class, this::onReadReqMsg)
       .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
       .match(Messages.WriteReqMsg.class, this::onWriteReqMsg)
@@ -67,11 +56,16 @@ class Cache extends AbstractActor {
       .build();
   }
 
-  // This message is used to set the children and the parent of the cache, probably will be split in 2 different messages
-  private void onJoinGroupMsg(JoinGroupMsg msg) {
+  // This message is used to set the children of the cache
+  private void onSetChildrenMsg(Messages.SetChildrenMsg msg) {
     this.children = msg.children;
-    this.parent=msg.parent;
-    System.out.println("Cache " + this.id + ";joined;parent = " + msg.parent + ";");
+    System.out.println("Cache " + this.id + ";setChildren;children = " + msg.children + ";");
+  }
+
+  // This message is used to set the parent of the cache
+  private void onSetParentMsg(Messages.SetParentMsg msg) {
+    this.parent = msg.parent;
+    System.out.println("Cache " + this.id + ";setParent;children = " + msg.parent + ";");
   }
 
   // This message is used to handle the read request message which can come both by a L1 cache or from a Client
