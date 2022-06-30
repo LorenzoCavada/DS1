@@ -65,7 +65,7 @@ class Cache extends AbstractActor {
   // This message is used to set the parent of the cache
   private void onSetParentMsg(Messages.SetParentMsg msg) {
     this.parent = msg.parent;
-    System.out.println("Cache " + this.id + ";setParent;children = " + msg.parent + ";");
+    System.out.println("Cache " + this.id + ";setParent;parent = " + msg.parent + ";");
   }
 
   // This message is used to handle the read request message which can come both by a L1 cache or from a Client

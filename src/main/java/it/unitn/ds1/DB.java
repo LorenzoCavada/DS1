@@ -45,6 +45,7 @@ class DB extends AbstractActor {
 
   private void onSetChildrenMsg(Messages.SetChildrenMsg msg) {
     this.children = msg.children;
+    System.out.println("DB " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
   private void multicast(Serializable m) {
