@@ -7,7 +7,14 @@ import java.util.Stack;
 
 public class Messages {
 
+    // represent the type of the cache, Level 1 or Level 2
     public enum typeCache{L1, L2};
+
+    // Represent the request of reading the value of the element identify by the key.
+    // The responsePath is a stack of actors that represent the path that the request has followed.
+    // This message will be originated by a client which will push its actorRef into the stack and than send the message to the L2 cache.
+    // The L2 cache will push its actorRef into the stack and then send the message to the L1 cache.
+    // The L1 cache will push its actorRef into the stack and then send the message to the DB.
     public static class ReadReqMsg implements Serializable {
         public final int key;   // key of requested item
         public Stack<ActorRef> responsePath;
@@ -17,7 +24,12 @@ public class Messages {
             this.responsePath=new Stack<>();
         }
     }
-
+    // Represent the response of a reading request.
+    // The response is sent to the actor identified by the responsePath and contain both the key of the requested item and the value of the requested item
+    // The responsePath stack will contain the whole chain of actors that the request has crossed.
+    // The DB will get by popping the first element of the stack the actorRef to the L1 cache to which the request has been made
+    // This L1 cache will pop again the first element of the stack and will get the L2 cache which received the read request from the client
+    // This L2 cache will pop again the first element of the stack and will get the client that made the request so will be able to forward the response to him
     public static class ReadRespMsg implements Serializable {
         public final int key;   // key of requested item
         public final int value; //value of requested item
@@ -30,10 +42,13 @@ public class Messages {
         }
     }
 
+    // Represent the request of writing a new value in the element identify by the key
+    // Is also included the originator of the request, this is for sending the confirmation of the write operation
+    // This message will be originated by a client and sent to a L2 cache, then will be forwarded to a L1 cache and finally to the DB
     public static class WriteReqMsg implements Serializable {
         public final int key;   // key of item to be written
         public final int newValue; //new value of item
-        public ActorRef originator; //originato of request
+        public ActorRef originator; //originator of request
 
         public WriteReqMsg(int key, int newValue, ActorRef originator) {
             this.key=key;
@@ -42,6 +57,9 @@ public class Messages {
         }
     }
 
+    // Represent the confirmation of the write operation.
+    // This will be originated by the L2 cache and sent to the client only if the L2 cache will see that the originator of the request is one of its children
+    // This message is so originated after have received a RefillMsg and found the originator in the L2 cache's children list
     public static class WriteConfirmMsg implements Serializable {
         public final int key;   // key of written item
 
@@ -50,6 +68,9 @@ public class Messages {
         }
     }
 
+    // Represent the request of refilling the cache with a new element. Is initially sent by the server to the L1 cache after a write operation
+    // Each L1 cache will then update its cache if the element is already saved in its cache, the L1 cache will then multicast the message to its children
+    // Each L2 cache will then update its cache if the element is already saved in its cache, if the originator is one of its children, the L2 cache will send a confirmation to the originator
     public static class RefillMsg implements Serializable {
         public final int key;   // key of item to be written
         public final int newValue; //new value of item

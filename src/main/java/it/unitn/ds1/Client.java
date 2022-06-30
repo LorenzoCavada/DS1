@@ -14,7 +14,7 @@ class Client extends AbstractActor {
 
   private Random rnd = new Random();
 
-  private final int id;         // ID of the current actor
+  private final int id; // ID of the current actor
 
   private ActorRef parent; //reference for parent
 
