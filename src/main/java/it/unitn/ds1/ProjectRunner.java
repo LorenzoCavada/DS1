@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.io.IOException;
 
-public class projectRunner {
+public class ProjectRunner {
   final private static int N_L1 = 2; // number of L1 caches
   final private static int N_L2 = N_L1 * 2; // number of L2 caches
   final private static int N_CLIENT = N_L2 * 2; // number of clients
@@ -91,9 +91,8 @@ public class projectRunner {
     }
 
 
+
     try {
-      System.out.println(">>> Wait for the chats to stop and press ENTER <<<");
-      System.in.read();
 
       System.out.println(">>> Press ENTER to exit <<<");
       System.in.read();
