@@ -26,7 +26,7 @@ dependencies {
 compileJava {
     options.compilerArgs += ["-Xlint:deprecation"]
 }
-mainClassName = "it.unitn.ds1.ProjectRunner"
+mainClassName = "it.unitn.ds1.CavadaBrighenti.FinalProject.ProjectRunner"
 
 run {
     standardInput = System.in

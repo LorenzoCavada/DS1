@@ -1,13 +1,14 @@
-package it.unitn.ds1;
+package it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
 
 import java.io.Serializable;
 import java.util.*;
 
-class DB extends AbstractActor {
+public class DB extends AbstractActor {
   private Random rnd = new Random();
   private List<ActorRef> children; // the list of children (L2 caches)
   private final int id = -1;         // ID of the current actor
@@ -28,27 +29,27 @@ class DB extends AbstractActor {
 
   /* -- Actor behaviour ----------------------------------------------------- */
 
-  private void onReadReqMsg(Messages.ReadReqMsg msg){
+  private void onReadReqMsg(ReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
-    Messages.ReadRespMsg resp = new Messages.ReadRespMsg(key, this.items.get(key), msg.responsePath);
+    ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath);
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     nextHop.tell(resp, getSelf());
   }
 
-  private void onWriteReqMsg(Messages.WriteReqMsg msg){
+  private void onWriteReqMsg(WriteReqMsg msg){
     Integer key = msg.key;
-    Messages.RefillMsg resp = new Messages.RefillMsg(key, msg.newValue, msg.originator);
+    RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator);
     multicast(resp);
   }
 
-  private void onSetChildrenMsg(Messages.SetChildrenMsg msg) {
+  private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
     System.out.println("DB " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
-  private void onInternalStateMsg(Messages.InternalStateMsg msg) {
+  private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
     sb.append("DB " + this.id + ";items:[");
     for(Integer k : items.keySet()){
@@ -79,10 +80,10 @@ class DB extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(Messages.ReadReqMsg.class,    this::onReadReqMsg)
-      .match(Messages.WriteReqMsg.class,    this::onWriteReqMsg)
-      .match(Messages.SetChildrenMsg.class,    this::onSetChildrenMsg)
-      .match(Messages.InternalStateMsg.class,   this::onInternalStateMsg)
+      .match(ReadReqMsg.class,    this::onReadReqMsg)
+      .match(WriteReqMsg.class,    this::onWriteReqMsg)
+      .match(SetChildrenMsg.class,    this::onSetChildrenMsg)
+      .match(InternalStateMsg.class,   this::onInternalStateMsg)
       .build();
   }
 }

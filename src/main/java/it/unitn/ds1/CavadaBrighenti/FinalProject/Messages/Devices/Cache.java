@@ -1,31 +1,33 @@
-package it.unitn.ds1;
+package it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.CacheType;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
 
 import java.io.Serializable;
 import java.util.*;
 
-class Cache extends AbstractActor {
+public class Cache extends AbstractActor {
 
   private Random rnd = new Random(); // Used to generate random value
   private ActorRef parent; // reference to the parent, may be a L1 Cache or the DB
   private List<ActorRef> children; // the list of children, they can be or a list of L2 caches or a list of Clients
   private final int id; // ID of the current actor
-  private final Messages.typeCache type; // type of the current cache, may be L1 or L2
+  private final CacheType type; // type of the current cache, may be L1 or L2
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
   /* -- Actor constructor --------------------------------------------------- */
 
-  public Cache(int id, Messages.typeCache type) {
+  public Cache(int id, CacheType type) {
     this.id = id;
     this.type=type;
     this.savedItems=new HashMap<>();
   }
 
-  static public Props props(int id, Messages.typeCache type) {
+  static public Props props(int id, CacheType type) {
     return Props.create(Cache.class, () -> new Cache(id, type));
   }
 
@@ -47,24 +49,24 @@ class Cache extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(Messages.SetChildrenMsg.class, this::onSetChildrenMsg)
-      .match(Messages.SetParentMsg.class, this::onSetParentMsg)
-      .match(Messages.ReadReqMsg.class, this::onReadReqMsg)
-      .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
-      .match(Messages.WriteReqMsg.class, this::onWriteReqMsg)
-      .match(Messages.RefillMsg.class, this::onRefillMsg)
-      .match(Messages.InternalStateMsg.class, this::onInternalStateMsg)
+      .match(SetChildrenMsg.class, this::onSetChildrenMsg)
+      .match(SetParentMsg.class, this::onSetParentMsg)
+      .match(ReadReqMsg.class, this::onReadReqMsg)
+      .match(ReadRespMsg.class, this::onReadRespMsg)
+      .match(WriteReqMsg.class, this::onWriteReqMsg)
+      .match(RefillMsg.class, this::onRefillMsg)
+      .match(InternalStateMsg.class, this::onInternalStateMsg)
       .build();
   }
 
   // This message is used to set the children of the cache
-  private void onSetChildrenMsg(Messages.SetChildrenMsg msg) {
+  private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
     System.out.println("Cache " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
   // This message is used to set the parent of the cache
-  private void onSetParentMsg(Messages.SetParentMsg msg) {
+  private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
     System.out.println("Cache " + this.id + ";setParent;parent = " + msg.parent + ";");
   }
@@ -72,11 +74,11 @@ class Cache extends AbstractActor {
   // This message is used to handle the read request message which can come both by a L1 cache or from a Client
   // If the requested element is in the cache, the value associated to the key is returned to the requester
   // Else the message is forwarded to the parent cache
-  private void onReadReqMsg(Messages.ReadReqMsg msg){
+  private void onReadReqMsg(ReadReqMsg msg){
     if(savedItems.containsKey(msg.key)){
       ActorRef nextHop=msg.responsePath.pop();
       Integer key = msg.key;
-      Messages.ReadRespMsg resp = new Messages.ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
+      ReadRespMsg resp = new ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
       System.out.println("Cache " + this.id + ";readReq for key = " + msg.key + "; value = " + this.savedItems.get(msg.key) + ";");
       sendMessage(resp, nextHop);
     }else{
@@ -88,7 +90,7 @@ class Cache extends AbstractActor {
 
   // This message is used to handle the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
-  private void onWriteReqMsg(Messages.WriteReqMsg msg){
+  private void onWriteReqMsg(WriteReqMsg msg){
     System.out.println("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
     sendMessage(msg, parent);
   }
@@ -96,7 +98,7 @@ class Cache extends AbstractActor {
 
   // This message is used to handle the read response message.
   // After a read the cache needs to store the value in its memory and then forward it to its children
-  private void onReadRespMsg(Messages.ReadRespMsg msg) {
+  private void onReadRespMsg(ReadRespMsg msg) {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
@@ -109,25 +111,25 @@ class Cache extends AbstractActor {
   // Then, if the cache is a L1 cache, it will simply forward the message to all its children
   // If the cache is a L2 cache, it will check if the originator of the request is one of its children
   // If yes the L2 cache will send the confirmation of the write operation to the client
-  private void onRefillMsg(Messages.RefillMsg msg) {
+  private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
     if(savedItems.containsKey(key)){
       System.out.println("Cache " + this.id + ";update key = " + msg.key + ";");
       savedItems.put(key, msg.newValue);
     }
-    if(this.type == Messages.typeCache.L1){
+    if(this.type == CacheType.L1){
       multicast(msg);
-    }else if(this.type == Messages.typeCache.L2){
+    }else if(this.type == CacheType.L2){
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
-        Messages.WriteConfirmMsg resp = new Messages.WriteConfirmMsg(msg.key);
+        WriteConfirmMsg resp = new WriteConfirmMsg(msg.key);
         System.out.println("Cache " + this.id + ";send writeConfirm for key = " + msg.key + "; to " + msg.originator.path().name() + ";");
         sendMessage(resp, originator);
       }
     }
   }
 
-  private void onInternalStateMsg(Messages.InternalStateMsg msg) {
+  private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
     sb.append("Cache " + this.id + ";items:[");
     for(Integer k : savedItems.keySet()){

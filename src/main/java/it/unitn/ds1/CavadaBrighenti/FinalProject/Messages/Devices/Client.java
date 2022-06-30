@@ -1,17 +1,15 @@
-package it.unitn.ds1;
+package it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices;
 
 import akka.actor.AbstractActor;
-import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-class Client extends AbstractActor {
+public class Client extends AbstractActor {
 
   private Random rnd = new Random();
 
@@ -32,41 +30,41 @@ class Client extends AbstractActor {
   }
 
   /* -- Actor behaviour ----------------------------------------------------- */
-  private void onSetParentMsg(Messages.SetParentMsg msg) {
+  private void onSetParentMsg(SetParentMsg msg) {
     this.parent=msg.parent;
     System.out.println("Client " + this.id + ";setParent;parent = " + msg.parent + ";");
   }
 
-  private void onSetAvailL2Msg(Messages.SetAvailableL2Msg msg) {
+  private void onSetAvailL2Msg(SetAvailableL2Msg msg) {
     this.availableL2=msg.availL2;
     System.out.println("Client " + this.id + ";setListL2;list = " + msg.availL2 + ";");
   }
 
-  private void onReadRespMsg(Messages.ReadRespMsg msg) {
+  private void onReadRespMsg(ReadRespMsg msg) {
     System.out.println("Client " + this.id + ";ReadResp;key = " + msg.key + ";value = " + msg.value);
   }
 
-  private void onWriteConfirmMsg(Messages.WriteConfirmMsg msg){
+  private void onWriteConfirmMsg(WriteConfirmMsg msg){
     System.out.println("Client " + this.id + ";WriteConfirm;key = " + msg.key + ";confirmed");
   }
 
-  private void onDoReadMsg(Messages.DoReadMsg msg){
+  private void onDoReadMsg(DoReadMsg msg){
     doReadReq(msg.key);
   }
 
-  private void onDoWriteMsg(Messages.DoWriteMsg msg){
+  private void onDoWriteMsg(DoWriteMsg msg){
     doWriteReq(msg.key, msg.newValue);
   }
 
   private void doReadReq(Integer key){
-    Messages.ReadReqMsg msg = new Messages.ReadReqMsg(key);
+    ReadReqMsg msg = new ReadReqMsg(key);
     msg.responsePath.push(getSelf());
     sendMessage(msg);
     System.out.println("Client " + this.id + ";ReadReq;key = " + msg.key + ";");
   }
 
   private void doWriteReq(Integer key, Integer value){
-    Messages.WriteReqMsg msg = new Messages.WriteReqMsg(key, value, getSelf());
+    WriteReqMsg msg = new WriteReqMsg(key, value, getSelf());
     sendMessage(msg);
     System.out.println("Client " + this.id + ";WriteReq;key = " + msg.key + ";value="+msg.newValue);
   }
@@ -77,12 +75,12 @@ class Client extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(Messages.SetParentMsg.class, this::onSetParentMsg)
-      .match(Messages.SetAvailableL2Msg.class, this::onSetAvailL2Msg)
-      .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
-      .match(Messages.WriteConfirmMsg.class, this::onWriteConfirmMsg)
-      .match(Messages.DoReadMsg.class, this::onDoReadMsg)
-      .match(Messages.DoWriteMsg.class, this::onDoWriteMsg)
+      .match(SetParentMsg.class, this::onSetParentMsg)
+      .match(SetAvailableL2Msg.class, this::onSetAvailL2Msg)
+      .match(ReadRespMsg.class, this::onReadRespMsg)
+      .match(WriteConfirmMsg.class, this::onWriteConfirmMsg)
+      .match(DoReadMsg.class, this::onDoReadMsg)
+      .match(DoWriteMsg.class, this::onDoWriteMsg)
       .build();
   }
 
