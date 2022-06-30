@@ -18,7 +18,6 @@ public class DB extends AbstractActor {
   /* -- Actor constructor --------------------------------------------------- */
 
   public DB(HashMap<Integer, Integer> items) {
-
     this.items=new HashMap<>();
     this.items.putAll(items);
 
@@ -29,6 +28,11 @@ public class DB extends AbstractActor {
 
   /* -- Actor behaviour ----------------------------------------------------- */
 
+
+  // This method is called when a ReadReqMsg is received.
+  // The DB will get the ActorRef to which he needs to send the response.
+  // Then the DB will get the requested item from its memory.
+  // After that it will create the response message and then send it.
   private void onReadReqMsg(ReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
@@ -38,17 +42,23 @@ public class DB extends AbstractActor {
     nextHop.tell(resp, getSelf());
   }
 
+  // This method is called when a WriteReqMsg is received.
+  // The DB will update the item with the new value and then will send a Refill message to everyone.
   private void onWriteReqMsg(WriteReqMsg msg){
     Integer key = msg.key;
     RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator);
     multicast(resp);
   }
 
+  // This method is called when a SetChildrenMsg is received.
+  // This method is used to set the children of the DB.
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
     System.out.println("DB " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
+  // This methode is trigger when a InternalStateMsg is received.
+  // This methode will print the current state of the cache, so the saved item and the list of children.
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
     sb.append("DB " + this.id + ";items:[");

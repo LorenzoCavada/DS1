@@ -59,19 +59,20 @@ public class Cache extends AbstractActor {
       .build();
   }
 
-  // This message is used to set the children of the cache
+  // This method is used to set the childrens of the cache. Is triggered by a SetChildrenMsg message.
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
     System.out.println("Cache " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
-  // This message is used to set the parent of the cache
+  // This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
     System.out.println("Cache " + this.id + ";setParent;parent = " + msg.parent + ";");
   }
 
-  // This message is used to handle the read request message which can come both by a L1 cache or from a Client
+  // This method is used to handle the ReadReqMsg message that represent the read request message.
+  // This message can come both by a L1 cache or from a Client
   // If the requested element is in the cache, the value associated to the key is returned to the requester
   // Else the message is forwarded to the parent cache
   private void onReadReqMsg(ReadReqMsg msg){
@@ -88,7 +89,7 @@ public class Cache extends AbstractActor {
     }
   }
 
-  // This message is used to handle the write request message.
+  // This method is used to handle the WriteReqMsg message which represent the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(WriteReqMsg msg){
     System.out.println("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
@@ -96,7 +97,7 @@ public class Cache extends AbstractActor {
   }
 
 
-  // This message is used to handle the read response message.
+  // This method is used to handle the ReadRespMsg message which represent the read response message.
   // After a read the cache needs to store the value in its memory and then forward it to its children
   private void onReadRespMsg(ReadRespMsg msg) {
     Integer key = msg.key;
@@ -106,7 +107,7 @@ public class Cache extends AbstractActor {
     sendMessage(msg, nextHop);
   }
 
-  // This message is used to handle the refill message. This message is the response to a write request.
+  // This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
   // The cache will first check if the value is stored in its memory, in that case will update it
   // Then, if the cache is a L1 cache, it will simply forward the message to all its children
   // If the cache is a L2 cache, it will check if the originator of the request is one of its children
@@ -129,6 +130,9 @@ public class Cache extends AbstractActor {
     }
   }
 
+
+  // This methode is trigger when a InternalStateMsg is received.
+  // This methode will print the current state of the cache, so the saved item, the list of children and its parent
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
     sb.append("Cache " + this.id + ";items:[");
