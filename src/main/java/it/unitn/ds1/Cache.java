@@ -53,6 +53,7 @@ class Cache extends AbstractActor {
       .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
       .match(Messages.WriteReqMsg.class, this::onWriteReqMsg)
       .match(Messages.RefillMsg.class, this::onRefillMsg)
+      .match(Messages.InternalStateMsg.class, this::onInternalStateMsg)
       .build();
   }
 
@@ -76,9 +77,11 @@ class Cache extends AbstractActor {
       ActorRef nextHop=msg.responsePath.pop();
       Integer key = msg.key;
       Messages.ReadRespMsg resp = new Messages.ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
+      System.out.println("Cache " + this.id + ";readReq for key = " + msg.key + "; value = " + this.savedItems.get(msg.key) + ";");
       sendMessage(resp, nextHop);
     }else{
       msg.responsePath.push(getSelf());
+      System.out.println("Cache " + this.id + ";forwarding readReq for key = " + msg.key + "; to " + parent.path().name() + ";");
       sendMessage(msg, parent);
     }
   }
@@ -86,6 +89,7 @@ class Cache extends AbstractActor {
   // This message is used to handle the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(Messages.WriteReqMsg msg){
+    System.out.println("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
     sendMessage(msg, parent);
   }
 
@@ -96,6 +100,7 @@ class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
+    System.out.println("Cache " + this.id + ";forwarding readResp for key = " + msg.key + "; to " + nextHop.path().name() + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -107,6 +112,7 @@ class Cache extends AbstractActor {
   private void onRefillMsg(Messages.RefillMsg msg) {
     Integer key = msg.key;
     if(savedItems.containsKey(key)){
+      System.out.println("Cache " + this.id + ";update key = " + msg.key + ";");
       savedItems.put(key, msg.newValue);
     }
     if(this.type == Messages.typeCache.L1){
@@ -115,11 +121,26 @@ class Cache extends AbstractActor {
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         Messages.WriteConfirmMsg resp = new Messages.WriteConfirmMsg(msg.key);
+        System.out.println("Cache " + this.id + ";send writeConfirm for key = " + msg.key + "; to " + msg.originator.path().name() + ";");
         sendMessage(resp, originator);
       }
     }
   }
 
+  private void onInternalStateMsg(Messages.InternalStateMsg msg) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Cache " + this.id + ";items:[");
+    for(Integer k : savedItems.keySet()){
+      sb.append(k + ":" + savedItems.get(k) + ";");
+    }
+    sb.append("]; Children:[");
+    for(ActorRef ch : children){
+      sb.append(ch.path().name() + ";");
+    }
+    sb.append("]; Parent:" + parent.path().name());
+
+    System.out.println(sb);
+  }
 
   // This method is used to send a message to a given actor, is needed to simulate the network delays
   private void sendMessage(Serializable m, ActorRef dest){

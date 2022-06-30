@@ -107,4 +107,26 @@ public class Messages {
         }
     }
 
+    public static class DoReadMsg implements Serializable {
+        public final int key;   // key of item to be written
+
+        public DoReadMsg(int key) {
+            this.key=key;
+        }
+    }
+
+    public static class DoWriteMsg implements Serializable {
+        public final int key;   // key of item to be written
+        public final int newValue;
+
+        public DoWriteMsg(int key, int newValue) {
+            this.key=key;
+            this.newValue=newValue;
+        }
+    }
+
+    public static class InternalStateMsg implements Serializable {
+        public InternalStateMsg() {}
+    }
+
 }

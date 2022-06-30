@@ -48,6 +48,20 @@ class DB extends AbstractActor {
     System.out.println("DB " + this.id + ";setChildren;children = " + msg.children + ";");
   }
 
+  private void onInternalStateMsg(Messages.InternalStateMsg msg) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("DB " + this.id + ";items:[");
+    for(Integer k : items.keySet()){
+      sb.append(k + ":" + items.get(k) + ";");
+    }
+    sb.append("]; Children:[");
+    for(ActorRef ch : children){
+      sb.append(ch.path().name() + ";");
+    }
+    sb.append("];");
+    System.out.println(sb);
+  }
+
   private void multicast(Serializable m) {
     // multicast to all peers in the group (do not send any message to self)
     for (ActorRef p: children) {
@@ -68,6 +82,7 @@ class DB extends AbstractActor {
       .match(Messages.ReadReqMsg.class,    this::onReadReqMsg)
       .match(Messages.WriteReqMsg.class,    this::onWriteReqMsg)
       .match(Messages.SetChildrenMsg.class,    this::onSetChildrenMsg)
+      .match(Messages.InternalStateMsg.class,   this::onInternalStateMsg)
       .build();
   }
 }

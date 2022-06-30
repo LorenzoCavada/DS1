@@ -1,6 +1,7 @@
 package it.unitn.ds1;
 
 import akka.actor.AbstractActor;
+import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 
@@ -49,6 +50,14 @@ class Client extends AbstractActor {
     System.out.println("Client " + this.id + ";WriteConfirm;key = " + msg.key + ";confirmed");
   }
 
+  private void onDoReadMsg(Messages.DoReadMsg msg){
+    doReadReq(msg.key);
+  }
+
+  private void onDoWriteMsg(Messages.DoWriteMsg msg){
+    doWriteReq(msg.key, msg.newValue);
+  }
+
   private void doReadReq(Integer key){
     Messages.ReadReqMsg msg = new Messages.ReadReqMsg(key);
     msg.responsePath.push(getSelf());
@@ -72,6 +81,8 @@ class Client extends AbstractActor {
       .match(Messages.SetAvailableL2Msg.class, this::onSetAvailL2Msg)
       .match(Messages.ReadRespMsg.class, this::onReadRespMsg)
       .match(Messages.WriteConfirmMsg.class, this::onWriteConfirmMsg)
+      .match(Messages.DoReadMsg.class, this::onDoReadMsg)
+      .match(Messages.DoWriteMsg.class, this::onDoWriteMsg)
       .build();
   }
 
@@ -79,5 +90,10 @@ class Client extends AbstractActor {
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     parent.tell(m, getSelf());
+  }
+
+  // DEBUG
+  public ActorRef getParent(){
+    return parent;
   }
 }

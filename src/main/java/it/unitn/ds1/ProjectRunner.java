@@ -90,14 +90,71 @@ public class ProjectRunner {
       l2List.get(indexL2).tell(childL2, ActorRef.noSender());
     }
 
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nPrinting the stating internal state of the node");
+
+    // check initial internal state of each node
+    Messages.InternalStateMsg internalState = new Messages.InternalStateMsg();
+    db.tell(internalState, ActorRef.noSender());
+    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nStarting read operation");
+
+    // Client 300 asks for item 1
+    clientList.get(0).tell(new Messages.DoReadMsg(1), ActorRef.noSender());
+
+    // Client 301 asks for item 1
+    clientList.get(1).tell(new Messages.DoReadMsg(1), ActorRef.noSender());
+
+    // Client 302 asks for item 1
+    clientList.get(2).tell(new Messages.DoReadMsg(1), ActorRef.noSender());
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nPrinting internal state after read operations");
 
 
+    // printing the internal state
+    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nStarting the write operation");
+
+    // Client 303 asks for write 2 in item with key 1
+    clientList.get(3).tell(new Messages.DoWriteMsg(1, 2), ActorRef.noSender());
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nStarting internal state after the write operation");
+
+    // printing the internal state
+    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nPerform last read");
+
+    // Client 300 asks for item 1
+    clientList.get(0).tell(new Messages.DoReadMsg(1), ActorRef.noSender());
+
+    try { Thread.sleep(100); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    System.out.println("\n\nEnding the program");
+
+    /*
     try {
 
       System.out.println(">>> Press ENTER to exit <<<");
       System.in.read();
     } 
-    catch (IOException ioe) {}
+    catch (IOException ioe) {}*/
     system.terminate();
   }
 }
