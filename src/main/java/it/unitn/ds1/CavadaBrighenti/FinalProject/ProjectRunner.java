@@ -3,9 +3,9 @@ package it.unitn.ds1.CavadaBrighenti.FinalProject;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices.Cache;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices.Client;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices.DB;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.Cache;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.Client;
+import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.DB;
 
 import java.util.HashMap;
 import java.util.List;

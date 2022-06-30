@@ -1,4 +1,4 @@
-package it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.Devices;
+package it.unitn.ds1.CavadaBrighenti.FinalProject.Devices;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
