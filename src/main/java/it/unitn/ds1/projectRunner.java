@@ -80,8 +80,13 @@ public class projectRunner {
     }
 
     //finally we set clients as children of L2 caches
+    //at the same time, we set the L2 cache as parent of the corresponding client children
     for(int indexL2=0;indexL2<N_L2;indexL2++){
       Messages.SetChildrenMsg childL2=new Messages.SetChildrenMsg(partitionsClient.get(indexL2));
+      for(int indexClient=0;indexClient<partitionsClient.get(indexL2).size();indexClient++){
+        Messages.SetParentMsg parentClient=new Messages.SetParentMsg(l2List.get(indexL2));
+        partitionsClient.get(indexL2).get(indexClient).tell(parentClient, ActorRef.noSender());
+      }
       l2List.get(indexL2).tell(childL2, ActorRef.noSender());
     }
 
