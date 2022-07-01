@@ -1,13 +1,17 @@
-package it.unitn.ds1.CavadaBrighenti.FinalProject.Devices;
+package EasyCache.Devices;
 
+import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
+import EasyCache.Messages.*;
 
 import java.io.Serializable;
 import java.util.List;
 import java.util.Random;
+
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class Client extends AbstractActor {
 
@@ -18,6 +22,9 @@ public class Client extends AbstractActor {
   private ActorRef parent; //reference for parent
 
   private List<ActorRef> availableL2; //all the available L2 caches for timeout
+
+
+  private static final Logger LOGGER = LogManager.getLogger(Client.class);
 
   /* -- Actor constructor --------------------------------------------------- */
 
@@ -35,7 +42,7 @@ public class Client extends AbstractActor {
   // It is used to set the parent of the client.
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent=msg.parent;
-    System.out.println("Client " + this.id + ";setParent;parent = " + msg.parent + ";");
+    LOGGER.info("Client " + this.id + ";setParent;parent = " + msg.parent.path().name() + ";");
   }
 
   // This method is called when a SetAvailableL2Msg is received.
@@ -43,19 +50,19 @@ public class Client extends AbstractActor {
   // This list will become useful when the crash will be introduced.
   private void onSetAvailL2Msg(SetAvailableL2Msg msg) {
     this.availableL2=msg.availL2;
-    System.out.println("Client " + this.id + ";setListL2;list = " + msg.availL2 + ";");
+    LOGGER.info("Client " + this.id + ";setListL2;list = " + msg.availL2 + ";");
   }
 
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
-    System.out.println("Client " + this.id + ";ReadResp;key = " + msg.key + ";value = " + msg.value);
+    LOGGER.info("Client " + this.id + ";ReadResp;key = " + msg.key + ";value = " + msg.value);
   }
 
   // This method is called when a onWriteConfirmMsg is received.
   // It is used to print the result of a write request.
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
-    System.out.println("Client " + this.id + ";WriteConfirm;key = " + msg.key + ";confirmed");
+    LOGGER.info("Client " + this.id + ";WriteConfirm;key = " + msg.key + ";confirmed");
   }
 
   // This method is called when a onDoReadMsg is received.
@@ -79,7 +86,7 @@ public class Client extends AbstractActor {
     ReadReqMsg msg = new ReadReqMsg(key);
     msg.responsePath.push(getSelf());
     sendMessage(msg);
-    System.out.println("Client " + this.id + ";ReadReq;key = " + msg.key + ";");
+    LOGGER.info("Client " + this.id + ";ReadReq;key = " + msg.key + ";");
   }
 
   // This method will perform the actual write operation.
@@ -88,7 +95,7 @@ public class Client extends AbstractActor {
   private void doWriteReq(Integer key, Integer value){
     WriteReqMsg msg = new WriteReqMsg(key, value, getSelf());
     sendMessage(msg);
-    System.out.println("Client " + this.id + ";WriteReq;key = " + msg.key + ";value="+msg.newValue);
+    LOGGER.info("Client " + this.id + ";WriteReq;key = " + msg.key + ";value="+msg.newValue);
   }
 
 

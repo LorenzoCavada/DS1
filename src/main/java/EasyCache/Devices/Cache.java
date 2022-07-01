@@ -1,14 +1,16 @@
-package it.unitn.ds1.CavadaBrighenti.FinalProject.Devices;
+package EasyCache.Devices;
 
+import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.CacheType;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
+import EasyCache.CacheType;
+import EasyCache.Messages.*;
 
 import java.io.Serializable;
 import java.util.*;
-
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 public class Cache extends AbstractActor {
 
   private Random rnd = new Random(); // Used to generate random value
@@ -19,6 +21,7 @@ public class Cache extends AbstractActor {
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
+  private static final Logger LOGGER = LogManager.getLogger(Cache.class);
   /* -- Actor constructor --------------------------------------------------- */
 
   public Cache(int id, CacheType type) {
@@ -59,16 +62,20 @@ public class Cache extends AbstractActor {
       .build();
   }
 
-  // This method is used to set the childrens of the cache. Is triggered by a SetChildrenMsg message.
+  // This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
-    System.out.println("Cache " + this.id + ";setChildren;children = " + msg.children + ";");
+    StringBuilder sb = new StringBuilder();
+    for (ActorRef c: children) {
+      sb.append(c.path().name() + "; ");
+    }
+    LOGGER.info("Cache " + this.id + ";setChildren;children = [" + sb + "]");
   }
 
   // This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
-    System.out.println("Cache " + this.id + ";setParent;parent = " + msg.parent + ";");
+    LOGGER.info("Cache " + this.id + ";setParent;parent = " + msg.parent.path().name() + ";");
   }
 
   // This method is used to handle the ReadReqMsg message that represent the read request message.
@@ -80,11 +87,11 @@ public class Cache extends AbstractActor {
       ActorRef nextHop=msg.responsePath.pop();
       Integer key = msg.key;
       ReadRespMsg resp = new ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
-      System.out.println("Cache " + this.id + ";readReq for key = " + msg.key + "; value = " + this.savedItems.get(msg.key) + ";");
+      LOGGER.info("Cache " + this.id + ";readReq for key = " + msg.key + "; value = " + this.savedItems.get(msg.key) + ";");
       sendMessage(resp, nextHop);
     }else{
       msg.responsePath.push(getSelf());
-      System.out.println("Cache " + this.id + ";forwarding readReq for key = " + msg.key + "; to " + parent.path().name() + ";");
+      LOGGER.info("Cache " + this.id + ";forwarding readReq for key = " + msg.key + "; to " + parent.path().name() + ";");
       sendMessage(msg, parent);
     }
   }
@@ -92,7 +99,7 @@ public class Cache extends AbstractActor {
   // This method is used to handle the WriteReqMsg message which represent the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(WriteReqMsg msg){
-    System.out.println("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
+    LOGGER.info("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
     sendMessage(msg, parent);
   }
 
@@ -103,7 +110,7 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
-    System.out.println("Cache " + this.id + ";forwarding readResp for key = " + msg.key + "; to " + nextHop.path().name() + ";");
+    LOGGER.info("Cache " + this.id + ";forwarding readResp for key = " + msg.key + "; to " + nextHop.path().name() + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -115,7 +122,7 @@ public class Cache extends AbstractActor {
   private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
     if(savedItems.containsKey(key)){
-      System.out.println("Cache " + this.id + ";update key = " + msg.key + ";");
+      LOGGER.info("Cache " + this.id + ";update key = " + msg.key + ";");
       savedItems.put(key, msg.newValue);
     }
     if(this.type == CacheType.L1){
@@ -124,7 +131,7 @@ public class Cache extends AbstractActor {
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         WriteConfirmMsg resp = new WriteConfirmMsg(msg.key);
-        System.out.println("Cache " + this.id + ";send writeConfirm for key = " + msg.key + "; to " + msg.originator.path().name() + ";");
+        LOGGER.info("Cache " + this.id + ";send writeConfirm for key = " + msg.key + "; to " + msg.originator.path().name() + ";");
         sendMessage(resp, originator);
       }
     }
@@ -145,7 +152,7 @@ public class Cache extends AbstractActor {
     }
     sb.append("]; Parent:" + parent.path().name());
 
-    System.out.println(sb);
+    LOGGER.info(sb);
   }
 
   // This method is used to send a message to a given actor, is needed to simulate the network delays

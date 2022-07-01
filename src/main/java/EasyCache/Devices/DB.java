@@ -1,9 +1,12 @@
-package it.unitn.ds1.CavadaBrighenti.FinalProject.Devices;
+package EasyCache.Devices;
 
+import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
+import EasyCache.Messages.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.Serializable;
 import java.util.*;
@@ -15,6 +18,7 @@ public class DB extends AbstractActor {
 
   private HashMap<Integer, Integer> items;
 
+  private static final Logger LOGGER = LogManager.getLogger(DB.class);
   /* -- Actor constructor --------------------------------------------------- */
 
   public DB(HashMap<Integer, Integer> items) {
@@ -54,7 +58,11 @@ public class DB extends AbstractActor {
   // This method is used to set the children of the DB.
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
-    System.out.println("DB " + this.id + ";setChildren;children = " + msg.children + ";");
+    StringBuilder sb = new StringBuilder();
+    for (ActorRef c: children) {
+      sb.append(c.path().name() + "; ");
+    }
+    LOGGER.info("DB " + this.id + ";setChildren;children = [" + sb + "]");
   }
 
   // This methode is trigger when a InternalStateMsg is received.
@@ -70,7 +78,7 @@ public class DB extends AbstractActor {
       sb.append(ch.path().name() + ";");
     }
     sb.append("];");
-    System.out.println(sb);
+    LOGGER.info(sb);
   }
 
   private void multicast(Serializable m) {

@@ -1,21 +1,26 @@
-package it.unitn.ds1.CavadaBrighenti.FinalProject;
+package EasyCache;
 
+import EasyCache.Devices.Cache;
+import EasyCache.Devices.Client;
+import EasyCache.Devices.DB;
+import EasyCache.Messages.*;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Messages.*;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.Cache;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.Client;
-import it.unitn.ds1.CavadaBrighenti.FinalProject.Devices.DB;
+import EasyCache.Messages.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class ProjectRunner {
   final private static int N_L1 = 2; // number of L1 caches
   final private static int N_L2 = N_L1 * 2; // number of L2 caches
   final private static int N_CLIENT = N_L2 * 2; // number of clients
   final private static int N_ITEMS = 20; // number of items to be stored in the DB
+  private static final Logger LOGGER = LogManager.getLogger(ProjectRunner.class);
 
   public static void main(String[] args) {
 
@@ -23,6 +28,10 @@ public class ProjectRunner {
     final ActorSystem system = ActorSystem.create("DS1_project");
 
     // creating items list
+    LOGGER.info("HOLA HOLA");
+    LOGGER.error("HOLA HOLA");
+    LOGGER.debug("HOLA HOLA");
+    LOGGER.trace("HOLA HOLA");
     HashMap<Integer, Integer> items = new HashMap<Integer, Integer>();
     for (int i = 0; i < N_ITEMS; i++) {
       items.put(i, i);
