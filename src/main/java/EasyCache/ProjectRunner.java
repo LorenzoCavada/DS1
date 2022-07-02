@@ -139,7 +139,7 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("\n\nStarting internal state after the write operation");
+    LOGGER.info("Starting internal state after the write operation");
 
     // printing the internal state
     l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
