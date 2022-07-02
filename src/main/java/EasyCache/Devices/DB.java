@@ -62,18 +62,18 @@ public class DB extends AbstractActor {
     for (ActorRef c: children) {
       sb.append(c.path().name() + "; ");
     }
-    LOGGER.info("DB " + this.id + ";setChildren;children = [" + sb + "]");
+    LOGGER.info("DB " + this.id + "; children_set_to: [" + sb + "]");
   }
 
   // This methode is trigger when a InternalStateMsg is received.
   // This methode will print the current state of the cache, so the saved item and the list of children.
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
-    sb.append("DB " + this.id + ";items:[");
+    sb.append("INTERNAL_STATE: DB " + this.id + "; items: [");
     for(Integer k : items.keySet()){
       sb.append(k + ":" + items.get(k) + ";");
     }
-    sb.append("]; Children:[");
+    sb.append("]; children: [");
     for(ActorRef ch : children){
       sb.append(ch.path().name() + ";");
     }

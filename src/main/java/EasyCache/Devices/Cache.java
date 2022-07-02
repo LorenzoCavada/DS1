@@ -67,15 +67,15 @@ public class Cache extends AbstractActor {
     this.children = msg.children;
     StringBuilder sb = new StringBuilder();
     for (ActorRef c: children) {
-      sb.append(c.path().name() + "; ");
+      sb.append(c.path().name() + ";");
     }
-    LOGGER.info("Cache " + this.id + ";setChildren;children = [" + sb + "]");
+    LOGGER.info("Cache " + this.id + "; children_set_to: [" + sb + "]");
   }
 
   // This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
-    LOGGER.info("Cache " + this.id + ";setParent;parent = " + msg.parent.path().name() + ";");
+    LOGGER.info("Cache " + this.id + "; parent_set_to: " + msg.parent.path().name() + ";");
   }
 
   // This method is used to handle the ReadReqMsg message that represent the read request message.
@@ -87,11 +87,11 @@ public class Cache extends AbstractActor {
       ActorRef nextHop=msg.responsePath.pop();
       Integer key = msg.key;
       ReadRespMsg resp = new ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
-      LOGGER.info("Cache " + this.id + ";readReq for key = " + msg.key + "; value = " + this.savedItems.get(msg.key) + ";");
+      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; cached_value: " + this.savedItems.get(msg.key) + ";");
       sendMessage(resp, nextHop);
     }else{
       msg.responsePath.push(getSelf());
-      LOGGER.info("Cache " + this.id + ";forwarding readReq for key = " + msg.key + "; to " + parent.path().name() + ";");
+      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + ";");
       sendMessage(msg, parent);
     }
   }
@@ -99,7 +99,7 @@ public class Cache extends AbstractActor {
   // This method is used to handle the WriteReqMsg message which represent the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(WriteReqMsg msg){
-    LOGGER.info("Cache " + this.id + ";forwarding writeReq for key = " + msg.key + "; to " + parent.path().name() + ";");
+    LOGGER.info("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + ";");
     sendMessage(msg, parent);
   }
 
@@ -110,7 +110,7 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
-    LOGGER.info("Cache " + this.id + ";forwarding readResp for key = " + msg.key + "; to " + nextHop.path().name() + ";");
+    LOGGER.info("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -122,7 +122,7 @@ public class Cache extends AbstractActor {
   private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
     if(savedItems.containsKey(key)){
-      LOGGER.info("Cache " + this.id + ";update key = " + msg.key + ";");
+      LOGGER.info("Cache " + this.id + "; update_value_for_item: " + msg.key + ";");
       savedItems.put(key, msg.newValue);
     }
     if(this.type == CacheType.L1){
@@ -131,7 +131,7 @@ public class Cache extends AbstractActor {
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         WriteConfirmMsg resp = new WriteConfirmMsg(msg.key);
-        LOGGER.info("Cache " + this.id + ";send writeConfirm for key = " + msg.key + "; to " + msg.originator.path().name() + ";");
+        LOGGER.info("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + ";");
         sendMessage(resp, originator);
       }
     }
@@ -142,15 +142,15 @@ public class Cache extends AbstractActor {
   // This methode will print the current state of the cache, so the saved item, the list of children and its parent
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
-    sb.append("Cache " + this.id + ";items:[");
+    sb.append("INTERNAL_STATE: Cache " + this.id + "; items: [");
     for(Integer k : savedItems.keySet()){
       sb.append(k + ":" + savedItems.get(k) + ";");
     }
-    sb.append("]; Children:[");
+    sb.append("]; children: [");
     for(ActorRef ch : children){
       sb.append(ch.path().name() + ";");
     }
-    sb.append("]; Parent:" + parent.path().name());
+    sb.append("]; Parent: " + parent.path().name());
 
     LOGGER.info(sb);
   }

@@ -28,10 +28,6 @@ public class ProjectRunner {
     final ActorSystem system = ActorSystem.create("DS1_project");
 
     // creating items list
-    LOGGER.info("HOLA HOLA");
-    LOGGER.error("HOLA HOLA");
-    LOGGER.debug("HOLA HOLA");
-    LOGGER.trace("HOLA HOLA");
     HashMap<Integer, Integer> items = new HashMap<Integer, Integer>();
     for (int i = 0; i < N_ITEMS; i++) {
       items.put(i, i);
@@ -104,7 +100,7 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nPrinting the stating internal state of the node");
+    LOGGER.info("Printing the stating internal state of the node");
 
     // check initial internal state of each node
     InternalStateMsg internalState = new InternalStateMsg();
@@ -114,7 +110,7 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nStarting read operation");
+    LOGGER.info("Starting read operation");
 
     // Client 300 asks for item 1
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
@@ -127,7 +123,7 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nPrinting internal state after read operations");
+    LOGGER.info("Printing internal state after read operations");
 
 
     // printing the internal state
@@ -136,14 +132,14 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nStarting the write operation");
+    LOGGER.info("Starting the write operation");
 
     // Client 303 asks for write 2 in item with key 1
     clientList.get(3).tell(new DoWriteMsg(1, 2), ActorRef.noSender());
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nStarting internal state after the write operation");
+    LOGGER.info("\n\nStarting internal state after the write operation");
 
     // printing the internal state
     l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
@@ -151,19 +147,19 @@ public class ProjectRunner {
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nPerform last read");
+    LOGGER.info("Perform last read");
 
     // Client 300 asks for item 1
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
 
     try { Thread.sleep(100); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    System.out.println("\n\nEnding the program");
+    LOGGER.info("Ending the program");
 
     /*
     try {
 
-      System.out.println(">>> Press ENTER to exit <<<");
+      LOGGER.info(">>> Press ENTER to exit <<<");
       System.in.read();
     } 
     catch (IOException ioe) {}*/
