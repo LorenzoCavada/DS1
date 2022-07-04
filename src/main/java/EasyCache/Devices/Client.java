@@ -61,6 +61,7 @@ public class Client extends AbstractActor {
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
+    System.out.println("Client " + this.id + " BELLLAAAAAAA");
     pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
   }
@@ -76,13 +77,6 @@ public class Client extends AbstractActor {
   // It is used to trigger the read process by providing the key of the item to read.
   // Is used for debug purposes.
   private void onDoReadMsg(DoReadMsg msg){
-    while(this.pendingReq.size()>0){
-      try {
-        Thread.sleep(50);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
     doReadReq(msg.key);
   }
 
@@ -90,13 +84,6 @@ public class Client extends AbstractActor {
   // It is used to trigger the write process by providing the key of the item to update and the newValue.
   // Is used for debug purposes.
   private void onDoWriteMsg(DoWriteMsg msg){
-    while(this.pendingReq.size()>0){
-      try {
-        Thread.sleep(50);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
     doWriteReq(msg.key, msg.newValue);
   }
 
