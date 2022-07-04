@@ -6,10 +6,7 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -26,6 +23,8 @@ public class Client extends AbstractActor {
 
   private final List<UUID> pendingReq; // list of all the pending request which are still waiting for a response
 
+  private Queue<Message> waitingReqs;
+
 
   private static final Logger LOGGER = LogManager.getLogger(Client.class);
 
@@ -35,6 +34,7 @@ public class Client extends AbstractActor {
     this.id = id;
     this.availableL2=new ArrayList<>();
     this.pendingReq=new ArrayList<>();
+    this.waitingReqs=new LinkedList<>();
   }
 
   static public Props props(int id) {
@@ -63,6 +63,10 @@ public class Client extends AbstractActor {
   private void onReadRespMsg(ReadRespMsg msg) {
     pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
+    if (!this.waitingReqs.isEmpty()){
+      Message nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
   }
 
   // This method is called when a onWriteConfirmMsg is received.
@@ -70,20 +74,41 @@ public class Client extends AbstractActor {
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
     pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed;");
+    if (!this.waitingReqs.isEmpty()){
+      Message nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
+  }
+
+  private void doNext(Message msg){
+    if (msg instanceof DoReadMsg){
+      doReadReq(((DoReadMsg) msg).key);
+    }else if (msg instanceof DoWriteMsg){
+      doWriteReq(((DoWriteMsg) msg).key, ((DoWriteMsg) msg).newValue);
+    }
   }
 
   // This method is called when a onDoReadMsg is received.
   // It is used to trigger the read process by providing the key of the item to read.
   // Is used for debug purposes.
   private void onDoReadMsg(DoReadMsg msg){
-    doReadReq(msg.key);
+    if (this.pendingReq.size()>0){
+      this.waitingReqs.add(msg);
+    }else{
+      doReadReq(msg.key);
+    }
   }
 
   // This method is called when a DoWriteMsg is received.
   // It is used to trigger the write process by providing the key of the item to update and the newValue.
   // Is used for debug purposes.
   private void onDoWriteMsg(DoWriteMsg msg){
-    doWriteReq(msg.key, msg.newValue);
+    if(this.pendingReq.size()>0){
+      this.waitingReqs.add(msg);
+    }else{
+      doWriteReq(msg.key, msg.newValue);
+    }
+
   }
 
   // This method will perform the actual read operation.
@@ -101,13 +126,6 @@ public class Client extends AbstractActor {
   // First the client will create a WriteReqMsg specifying himself as originator.
   // Then it will send the WriteReqMsg to the parent node.
   private void doWriteReq(Integer key, Integer value){
-    while(this.pendingReq.size()>0){
-      try {
-        Thread.sleep(10);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
     WriteReqMsg msg = new WriteReqMsg(key, value, getSelf());
     sendMessage(msg);
     LOGGER.info("Client " + this.id + "; starting_write_request_for_item: " + msg.key + " newValue: "+msg.newValue);
