@@ -6,8 +6,10 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -22,6 +24,8 @@ public class Client extends AbstractActor {
 
   private List<ActorRef> availableL2; //all the available L2 caches for timeout
 
+  private final List<UUID> pendingReq; // list of all the pending request which are still waiting for a response
+
 
   private static final Logger LOGGER = LogManager.getLogger(Client.class);
 
@@ -29,6 +33,8 @@ public class Client extends AbstractActor {
 
   public Client(int id) {
     this.id = id;
+    this.availableL2=new ArrayList<>();
+    this.pendingReq=new ArrayList<>();
   }
 
   static public Props props(int id) {
@@ -55,12 +61,14 @@ public class Client extends AbstractActor {
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
+    pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
   }
 
   // This method is called when a onWriteConfirmMsg is received.
   // It is used to print the result of a write request.
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
+    pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed;");
   }
 
@@ -68,6 +76,13 @@ public class Client extends AbstractActor {
   // It is used to trigger the read process by providing the key of the item to read.
   // Is used for debug purposes.
   private void onDoReadMsg(DoReadMsg msg){
+    while(this.pendingReq.size()>0){
+      try {
+        Thread.sleep(50);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
     doReadReq(msg.key);
   }
 
@@ -75,26 +90,42 @@ public class Client extends AbstractActor {
   // It is used to trigger the write process by providing the key of the item to update and the newValue.
   // Is used for debug purposes.
   private void onDoWriteMsg(DoWriteMsg msg){
+    while(this.pendingReq.size()>0){
+      try {
+        Thread.sleep(50);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
     doWriteReq(msg.key, msg.newValue);
   }
 
   // This method will perform the actual read operation.
   // First the client will create a ReadReqMsg and will push himself into the responsePath.
   // Then it will send the ReadReqMsg to the parent node.
-  private void doReadReq(Integer key){
+  private void doReadReq(Integer key) {
     ReadReqMsg msg = new ReadReqMsg(key);
     msg.responsePath.push(getSelf());
     sendMessage(msg);
     LOGGER.info("Client " + this.id + "; starting_read_request_for_item: " + msg.key + "; MSG_id: " + msg.uuid + ";");
+    pendingReq.add(msg.uuid);
   }
 
   // This method will perform the actual write operation.
   // First the client will create a WriteReqMsg specifying himself as originator.
   // Then it will send the WriteReqMsg to the parent node.
   private void doWriteReq(Integer key, Integer value){
+    while(this.pendingReq.size()>0){
+      try {
+        Thread.sleep(10);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
     WriteReqMsg msg = new WriteReqMsg(key, value, getSelf());
     sendMessage(msg);
     LOGGER.info("Client " + this.id + "; starting_write_request_for_item: " + msg.key + " newValue: "+msg.newValue);
+    pendingReq.add(msg.uuid);
   }
 
 
