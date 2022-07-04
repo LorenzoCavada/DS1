@@ -187,7 +187,7 @@ public class ProjectRunner {
     try { Thread.sleep(1000); }
     catch (InterruptedException e) { e.printStackTrace(); }
     LOGGER.info("Client 2 perform a read operation");
-    // Client 300 asks for item 1
+    // Client 302 asks for item 1
     clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
 
 
