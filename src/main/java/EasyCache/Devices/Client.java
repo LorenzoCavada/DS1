@@ -61,7 +61,6 @@ public class Client extends AbstractActor {
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
-    System.out.println("Client " + this.id + " BELLLAAAAAAA");
     pendingReq.remove(msg.uuid);
     LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
   }
