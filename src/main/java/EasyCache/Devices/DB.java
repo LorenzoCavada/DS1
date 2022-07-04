@@ -40,7 +40,7 @@ public class DB extends AbstractActor {
   private void onReadReqMsg(ReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
-    ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath);
+    ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     nextHop.tell(resp, getSelf());
@@ -50,7 +50,7 @@ public class DB extends AbstractActor {
   // The DB will update the item with the new value and then will send a Refill message to everyone.
   private void onWriteReqMsg(WriteReqMsg msg){
     Integer key = msg.key;
-    RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator);
+    RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
     multicast(resp);
   }
 

@@ -3,6 +3,7 @@ package EasyCache.Messages;
 import akka.actor.ActorRef;
 
 import java.util.Stack;
+import java.util.UUID;
 
 // Represent the response of a reading request.
 // The response is sent to the actor identified by the responsePath and contain both the key of the requested item and the value of the requested item
@@ -14,11 +15,14 @@ public class ReadRespMsg extends Message{
     public final int key;   // key of requested item
     public final int value; //value of requested item
     public Stack<ActorRef> responsePath;
+    public final UUID uuid;
 
-    public ReadRespMsg(int key, int value, Stack<ActorRef> stack) {
+
+    public ReadRespMsg(int key, int value, Stack<ActorRef> stack, UUID uuid) {
         this.key=key;
         this.value=value;
         this.responsePath= (Stack<ActorRef>) stack.clone();
+        this.uuid = uuid;
     }
 }
 

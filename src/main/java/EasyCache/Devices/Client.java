@@ -4,7 +4,6 @@ import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import EasyCache.Messages.*;
 
 import java.io.Serializable;
 import java.util.List;
@@ -56,7 +55,7 @@ public class Client extends AbstractActor {
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
-    LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed;");
+    LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
   }
 
   // This method is called when a onWriteConfirmMsg is received.
@@ -86,7 +85,7 @@ public class Client extends AbstractActor {
     ReadReqMsg msg = new ReadReqMsg(key);
     msg.responsePath.push(getSelf());
     sendMessage(msg);
-    LOGGER.info("Client " + this.id + "; starting_read_request_for_item: " + msg.key + ";");
+    LOGGER.info("Client " + this.id + "; starting_read_request_for_item: " + msg.key + "; MSG_id: " + msg.uuid + ";");
   }
 
   // This method will perform the actual write operation.

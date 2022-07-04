@@ -18,6 +18,7 @@ public class Cache extends AbstractActor {
   private List<ActorRef> children; // the list of children, they can be or a list of L2 caches or a list of Clients
   private final int id; // ID of the current actor
   private final CacheType type; // type of the current cache, may be L1 or L2
+  private final List<UUID> pendingReq; // list of all the pending request which are still waiting for a response
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
@@ -28,6 +29,7 @@ public class Cache extends AbstractActor {
     this.id = id;
     this.type=type;
     this.savedItems=new HashMap<>();
+    this.pendingReq=new ArrayList<UUID>();
   }
 
   static public Props props(int id, CacheType type) {
@@ -86,12 +88,14 @@ public class Cache extends AbstractActor {
     if(savedItems.containsKey(msg.key)){
       ActorRef nextHop=msg.responsePath.pop();
       Integer key = msg.key;
-      ReadRespMsg resp = new ReadRespMsg(key, this.savedItems.get(key), msg.responsePath);
-      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; cached_value: " + this.savedItems.get(msg.key) + ";");
+      ReadRespMsg resp = new ReadRespMsg(key, this.savedItems.get(key), msg.responsePath, msg.uuid);
+      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; cached_value: " + this.savedItems.get(msg.key) + "; MSG_ID: " + msg.uuid + ";");
       sendMessage(resp, nextHop);
     }else{
       msg.responsePath.push(getSelf());
-      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + ";");
+      LOGGER.info("Cache " + this.id + "; read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
+      pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
+      LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
       sendMessage(msg, parent);
     }
   }
@@ -99,7 +103,9 @@ public class Cache extends AbstractActor {
   // This method is used to handle the WriteReqMsg message which represent the write request message.
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(WriteReqMsg msg){
-    LOGGER.info("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + ";");
+    LOGGER.info("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_id: " + msg.uuid + ";");
+    pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
+    LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
   }
 
@@ -110,7 +116,9 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
-    LOGGER.info("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + ";");
+    LOGGER.info("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + ";");
+    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+    LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -121,8 +129,10 @@ public class Cache extends AbstractActor {
   // If yes the L2 cache will send the confirmation of the write operation to the client
   private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
+    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+    LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
     if(savedItems.containsKey(key)){
-      LOGGER.info("Cache " + this.id + "; update_value_for_item: " + msg.key + ";");
+      LOGGER.info("Cache " + this.id + "; refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
       savedItems.put(key, msg.newValue);
     }
     if(this.type == CacheType.L1){
@@ -131,7 +141,7 @@ public class Cache extends AbstractActor {
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         WriteConfirmMsg resp = new WriteConfirmMsg(msg.key);
-        LOGGER.info("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + ";");
+        LOGGER.info("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + "; MSG_id: " + msg.uuid + ";");
         sendMessage(resp, originator);
       }
     }
@@ -150,8 +160,7 @@ public class Cache extends AbstractActor {
     for(ActorRef ch : children){
       sb.append(ch.path().name() + ";");
     }
-    sb.append("]; Parent: " + parent.path().name());
-
+    sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
     LOGGER.info(sb);
   }
 

@@ -2,5 +2,5 @@ package EasyCache.Messages;
 
 import java.io.Serializable;
 
-abstract class Message implements Serializable {
+abstract public class Message implements Serializable {
 }
