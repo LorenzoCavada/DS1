@@ -185,7 +185,7 @@ public class Cache extends AbstractActor {
       sb.append(ch.path().name() + ";");
     }
     sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
-    LOGGER.debug(sb);
+    LOGGER.info(sb);
   }
 
   // This method is used to send a message to a given actor, is needed to simulate the network delays
