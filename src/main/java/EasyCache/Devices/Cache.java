@@ -29,7 +29,7 @@ public class Cache extends AbstractActor {
     this.id = id;
     this.type=type;
     this.savedItems=new HashMap<>();
-    this.pendingReq=new ArrayList<UUID>();
+    this.pendingReq= new ArrayList<>();
   }
 
   static public Props props(int id, CacheType type) {
@@ -58,6 +58,8 @@ public class Cache extends AbstractActor {
       .match(SetParentMsg.class, this::onSetParentMsg)
       .match(ReadReqMsg.class, this::onReadReqMsg)
       .match(ReadRespMsg.class, this::onReadRespMsg)
+      .match(CritReadReqMsg.class, this::onCritReadReqMsg)
+      .match(CritReadRespMsg.class, this::onCritReadRespMsg)
       .match(WriteReqMsg.class, this::onWriteReqMsg)
       .match(RefillMsg.class, this::onRefillMsg)
       .match(InternalStateMsg.class, this::onInternalStateMsg)
@@ -81,9 +83,9 @@ public class Cache extends AbstractActor {
   }
 
   // This method is used to handle the ReadReqMsg message that represent the read request message.
-  // This message can come both by a L1 cache or from a Client
+  // This message can come both by a L2 cache or from a Client
   // If the requested element is in the cache, the value associated to the key is returned to the requester
-  // Else the message is forwarded to the parent cache
+  // Else the message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB
   private void onReadReqMsg(ReadReqMsg msg){
     if(savedItems.containsKey(msg.key)){
       ActorRef nextHop=msg.responsePath.pop();
@@ -98,6 +100,18 @@ public class Cache extends AbstractActor {
       LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
       sendMessage(msg, parent);
     }
+  }
+
+  // This method is used to handle the CritReadReqMsg message that represent the critical read request message.
+  // This message can come both by a L2 cache or from a Client
+  // We message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB
+  private void onCritReadReqMsg(CritReadReqMsg msg){
+    msg.responsePath.push(getSelf());
+    LOGGER.info("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
+    pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
+    LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
+    sendMessage(msg, parent);
+
   }
 
   // This method is used to handle the WriteReqMsg message which represent the write request message.
@@ -122,6 +136,16 @@ public class Cache extends AbstractActor {
     sendMessage(msg, nextHop);
   }
 
+  private void onCritReadRespMsg(CritReadRespMsg msg) {
+    Integer key = msg.key;
+    savedItems.put(key, msg.value);
+    ActorRef nextHop = msg.responsePath.pop();
+    LOGGER.info("Cache " + this.id + "; crit_read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + ";");
+    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+    LOGGER.info("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+    sendMessage(msg, nextHop);
+  }
+
   // This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
   // The cache will first check if the value is stored in its memory, in that case will update it
   // Then, if the cache is a L1 cache, it will simply forward the message to all its children
@@ -140,7 +164,7 @@ public class Cache extends AbstractActor {
     }else if(this.type == CacheType.L2){
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
-        WriteConfirmMsg resp = new WriteConfirmMsg(msg.key);
+        WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
         LOGGER.info("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + "; MSG_id: " + msg.uuid + ";");
         sendMessage(resp, originator);
       }
@@ -161,7 +185,7 @@ public class Cache extends AbstractActor {
       sb.append(ch.path().name() + ";");
     }
     sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
-    LOGGER.info(sb);
+    LOGGER.debug(sb);
   }
 
   // This method is used to send a message to a given actor, is needed to simulate the network delays
