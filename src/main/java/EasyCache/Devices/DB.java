@@ -62,7 +62,7 @@ public class DB extends AbstractActor {
     for (ActorRef c: children) {
       sb.append(c.path().name() + "; ");
     }
-    LOGGER.info("DB " + this.id + "; children_set_to: [" + sb + "]");
+    LOGGER.debug("DB " + this.id + "; children_set_to: [" + sb + "]");
   }
 
   // This methode is trigger when a InternalStateMsg is received.
@@ -78,7 +78,7 @@ public class DB extends AbstractActor {
       sb.append(ch.path().name() + ";");
     }
     sb.append("];");
-    LOGGER.info(sb);
+    LOGGER.debug(sb);
   }
 
   private void multicast(Serializable m) {

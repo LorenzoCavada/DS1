@@ -22,7 +22,6 @@ public class ProjectRunner {
 
     //Logging current run configuration
     Config.printConfig();
-
     // ---- START OF INITIALIZATION ----
 
     // create the 'DS1_project' actor system
@@ -168,7 +167,6 @@ public class ProjectRunner {
 
     try { Thread.sleep(1000); }
     catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Client 0 perform a read operation");
 
     // Client 300 asks for item 1
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());

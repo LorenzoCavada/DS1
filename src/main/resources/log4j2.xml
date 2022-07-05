@@ -5,15 +5,26 @@
     </Properties>
     <Appenders>
         <Console name="console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%-12d{HH:mm:ss,SSS} [%highlight{%-5level}] %-24c:%-4L - %msg%n"
-                           disableAnsi="false"/>
+            <PatternLayout disableAnsi="false">
+                <LevelPatternSelector defaultPattern="%-12d{HH:mm:ss,SSS} [%highlight{%-5level}] %-24c:%-4L - %msg%n">
+                    <PatternMatch key="DEBUG" pattern="%-12d{HH:mm:ss,SSS} [%highlight{%-5level}] %-24c:%-4L - %msg%n" />
+                    <PatternMatch key="ERROR" pattern="%-12d{HH:mm:ss,SSS} [%highlight{%-5level}] %-24c:%-4L - %msg%n" />
+                    <PatternMatch key="INFO" pattern="%-12d{HH:mm:ss,SSS} [%highlight{%-4level}] %msg%n" />
+                </LevelPatternSelector>
+            </PatternLayout>
         </Console>
         <File name="file" fileName="${appName}.log" append="false">
-            <PatternLayout pattern="%-12d{HH:mm:ss,SSS} [%-5level] %-24c:%-4L - %msg%n"/>
+            <PatternLayout disableAnsi="false">
+                <LevelPatternSelector defaultPattern="%-12d{HH:mm:ss,SSS} [%-5level] %-24c:%-4L - %msg%n">
+                    <PatternMatch key="DEBUG" pattern="%-12d{HH:mm:ss,SSS} [%-5level] %-24c:%-4L - %msg%n" />
+                    <PatternMatch key="ERROR" pattern="%-12d{HH:mm:ss,SSS} [%-5level] %-24c:%-4L - %msg%n" />
+                    <PatternMatch key="INFO" pattern="%-12d{HH:mm:ss,SSS} [%-4level] %msg%n" />
+                </LevelPatternSelector>
+            </PatternLayout>
         </File>
     </Appenders>
     <Loggers>
-        <Root level="INFO" additivity="false">
+        <Root level="DEBUG" additivity="false">
             <AppenderRef ref="console"/>
             <AppenderRef ref="file"/>
         </Root>

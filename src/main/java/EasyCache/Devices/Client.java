@@ -47,7 +47,7 @@ public class Client extends AbstractActor {
   // It is used to set the parent of the client.
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent=msg.parent;
-    LOGGER.info("Client " + this.id + "; parent_set_to: " + msg.parent.path().name() + ";");
+    LOGGER.debug("Client " + this.id + "; parent_set_to: " + msg.parent.path().name() + ";");
   }
 
   // This method is called when a SetAvailableL2Msg is received.
@@ -55,14 +55,14 @@ public class Client extends AbstractActor {
   // This list will become useful when the crash will be introduced.
   private void onSetAvailL2Msg(SetAvailableL2Msg msg) {
     this.availableL2=msg.availL2;
-    LOGGER.info("Client " + this.id + "; available_L2_set_to: " + msg.availL2 + ";");
+    LOGGER.debug("Client " + this.id + "; available_L2_set_to: " + msg.availL2 + ";");
   }
 
   // This method is called when a ReadRespMsg is received.
   // It is used to print the result of a read request.
   private void onReadRespMsg(ReadRespMsg msg) {
     pendingReq.remove(msg.uuid);
-    LOGGER.info("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + ";");
     if (!this.waitingReqs.isEmpty()){
       Message nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -73,7 +73,7 @@ public class Client extends AbstractActor {
   // It is used to print the result of a write request.
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
     pendingReq.remove(msg.uuid);
-    LOGGER.info("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed;");
+    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed;");
     if (!this.waitingReqs.isEmpty()){
       Message nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -118,7 +118,7 @@ public class Client extends AbstractActor {
     ReadReqMsg msg = new ReadReqMsg(key);
     msg.responsePath.push(getSelf());
     sendMessage(msg);
-    LOGGER.info("Client " + this.id + "; starting_read_request_for_item: " + msg.key + "; MSG_id: " + msg.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; starting_read_request_for_item: " + msg.key + "; MSG_id: " + msg.uuid + ";");
     pendingReq.add(msg.uuid);
   }
 
@@ -128,7 +128,7 @@ public class Client extends AbstractActor {
   private void doWriteReq(Integer key, Integer value){
     WriteReqMsg msg = new WriteReqMsg(key, value, getSelf());
     sendMessage(msg);
-    LOGGER.info("Client " + this.id + "; starting_write_request_for_item: " + msg.key + " newValue: "+msg.newValue);
+    LOGGER.debug("Client " + this.id + "; starting_write_request_for_item: " + msg.key + " newValue: "+msg.newValue);
     pendingReq.add(msg.uuid);
   }
 
