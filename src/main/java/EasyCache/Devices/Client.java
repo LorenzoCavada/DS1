@@ -160,7 +160,7 @@ public class Client extends AbstractActor {
       pendingReq.remove(msg.awaitedMsg.uuid);
       doNext(msg.awaitedMsg);
     }else{
-      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + ((ReadReqMsg) msg.awaitedMsg).key);
+      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
     }
   }
 
