@@ -147,7 +147,7 @@ public class Client extends AbstractActor {
 
   // This method is called when client goes in timeout
   private void onTimeoutMsg(TimeoutMsg msg) {
-    if (pendingReq.keySet().contains(msg.awaitedMsg.uuid)){
+    if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
       LOGGER.debug("Client " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key);
       int newParentIdx= rnd.nextInt(availableL2.size());
       while(availableL2.get(newParentIdx).equals(parent)){
@@ -201,6 +201,16 @@ public class Client extends AbstractActor {
     LOGGER.debug("Client " + this.id + "; parent: " + this.parent.path().name());
   }
 
+  private void onReqErrorMsg(ReqErrorMsg msg) {
+    pendingReq.get(msg.awaitedMsg.uuid).cancel();
+    pendingReq.remove(msg.awaitedMsg.uuid);
+    if(msg.awaitedMsg instanceof ReadReqMsg){
+      LOGGER.debug("Client " + this.id + "; error_in_read_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key);
+    }else if(msg.awaitedMsg instanceof WriteReqMsg){
+      LOGGER.debug("Client " + this.id + "; error_in_write_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
+    }
+  }
+
   // Here we define the mapping between the received message types
   // and our actor methods
   @Override
@@ -215,6 +225,7 @@ public class Client extends AbstractActor {
       .match(IsStillParentReqMsg.class, this::onIsStillParentReqMsg)
       .match(TimeoutMsg.class, this::onTimeoutMsg)
       .match(InternalStateMsg.class, this::onInternalStateMsg)
+      .match(ReqErrorMsg.class, this::onReqErrorMsg)
       .build();
   }
 

@@ -1,5 +1,6 @@
 package EasyCache.Devices;
 
+import EasyCache.Config;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
@@ -9,33 +10,38 @@ import EasyCache.CacheType;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import scala.concurrent.duration.Duration;
 
 public class Cache extends AbstractActor {
 
   private Random rnd = new Random(); // Used to generate random value
   private ActorRef parent; // reference to the parent, may be a L1 Cache or the DB
+
+  private ActorRef db;
   private List<ActorRef> children; // the list of children, they can be or a list of L2 caches or a list of Clients
   private final int id; // ID of the current actor
   private final CacheType type; // type of the current cache, may be L1 or L2
-  private final List<UUID> pendingReq; // list of all the pending request which are still waiting for a response
+  private final Map<UUID, Cancellable> pendingReq; // map of all the pending request which are still waiting for a response, with the corresponding timer
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
   private static final Logger LOGGER = LogManager.getLogger(Cache.class);
   /* -- Actor constructor --------------------------------------------------- */
 
-  public Cache(int id, CacheType type) {
+  public Cache(int id, CacheType type, ActorRef db) {
     this.id = id;
     this.type=type;
+    this.db=db;
     this.savedItems=new HashMap<>();
-    this.pendingReq= new ArrayList<>();
+    this.pendingReq= new HashMap<>();
   }
 
-  static public Props props(int id, CacheType type) {
-    return Props.create(Cache.class, () -> new Cache(id, type));
+  static public Props props(int id, CacheType type, ActorRef db) {
+    return Props.create(Cache.class, () -> new Cache(id, type, db));
   }
 
   /* -- Actor behaviour ----------------------------------------------------- */
@@ -63,7 +69,8 @@ public class Cache extends AbstractActor {
   }
 
   private void onAddChildMsg(AddChildMsg msg) {
-    this.children.add(msg.child);
+    if (!this.children.contains(msg.child))
+      this.children.add(msg.child);
     StringBuilder sb = new StringBuilder();
     for (ActorRef c: children) {
       sb.append(c.path().name() + ";");
@@ -89,10 +96,17 @@ public class Cache extends AbstractActor {
       LOGGER.debug("Cache " + this.id + "; read_req_for_item: " + msg.key + "; cached_value: " + this.savedItems.get(msg.key) + "; MSG_ID: " + msg.uuid + ";");
       sendMessage(resp, nextHop);
     }else{
-      msg.responsePath.push(getSelf());
       LOGGER.debug("Cache " + this.id + "; read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
-      pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
-      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
+      pendingReq.put(msg.uuid,
+              getContext().system().scheduler().scheduleOnce(
+                      Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                      getSelf(),                                          // destination actor reference
+                      new TimeoutMsg(msg),                                  // the message to send
+                      getContext().system().dispatcher(),                 // system dispatcher
+                      getSelf()                                           // source of the message (myself)
+              )); //adding the uuid of the message to the list of the pending ones
+      msg.responsePath.push(getSelf());
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
       sendMessage(msg, parent);
     }
   }
@@ -103,7 +117,14 @@ public class Cache extends AbstractActor {
   private void onCritReadReqMsg(CritReadReqMsg msg){
     msg.responsePath.push(getSelf());
     LOGGER.debug("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
-    pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
+    pendingReq.put(msg.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutMsg(msg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            )); //adding the uuid of the message to the list of the pending ones
     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
 
@@ -113,7 +134,14 @@ public class Cache extends AbstractActor {
   // A cache can only forward the request to its parent till it reach the DB.
   private void onWriteReqMsg(WriteReqMsg msg){
     LOGGER.debug("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_id: " + msg.uuid + ";");
-    pendingReq.add(msg.uuid); //adding the uuid of the message to the list of the pending ones
+    pendingReq.put(msg.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutMsg(msg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            )); //adding the uuid of the message to the list of the pending ones
     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
   }
@@ -125,7 +153,8 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
-    LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + ";");
+    LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
@@ -135,7 +164,8 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
     ActorRef nextHop = msg.responsePath.pop();
-    LOGGER.debug("Cache " + this.id + "; crit_read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + ";");
+    LOGGER.debug("Cache " + this.id + "; crit_read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
@@ -148,15 +178,17 @@ public class Cache extends AbstractActor {
   // If yes the L2 cache will send the confirmation of the write operation to the client
   private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
-    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
     if(savedItems.containsKey(key)){
       LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
       savedItems.put(key, msg.newValue);
     }
     if(this.type == CacheType.L1){
+      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       multicast(msg);
     }else if(this.type == CacheType.L2){
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
@@ -190,16 +222,27 @@ public class Cache extends AbstractActor {
     dest.tell(m, getSelf());
   }
 
+  private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
+    ActorRef sender = getSender();
+    boolean response;
+    if(sender.equals(this.parent)){
+      response=true;
+    }else{
+      response=false;
+    }
+    sender.tell(new IsStillParentRespMsg(response), getSelf());
+  }
+
   private void onRecoveryMsg(RecoveryMsg msg) {
     LOGGER.debug("Cache " + this.id + "; recovers;");
+    pendingReq.values().forEach(Cancellable::cancel);
     pendingReq.clear();
     savedItems.clear();
     for(ActorRef child: children){
       child.tell(new IsStillParentReqMsg(), getSelf());
     }
-    if (this.type==CacheType.L2){
-      //TODO
-    }else if(this.type==CacheType.L1){
+
+    if(this.type==CacheType.L1){
       //TODO
     }
     getContext().become(createReceive());
@@ -213,12 +256,32 @@ public class Cache extends AbstractActor {
   }
 
   //this method is used to change the behaviour of the cache to crashed
-    private void onCrashMsg(CrashMsg msg){
-        LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
-        //transactionsTimeout.values().forEach(Cancellable::cancel);
-        //transactionsTimeout.clear();
-        getContext().become(crashed());
+  private void onCrashMsg(CrashMsg msg){
+      LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+      getContext().become(crashed());
+  }
+
+  private void onTimeoutMsg(TimeoutMsg msg) {
+    if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
+      LOGGER.debug("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " msg_id: " + msg.awaitedMsg.uuid);
+      this.parent=this.db;
+
+      LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name());
+      AddChildMsg addMeMsg=new AddChildMsg(getSelf());
+      this.parent.tell(addMeMsg, getSelf());
+      pendingReq.remove(msg.awaitedMsg.uuid);
+
+      ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
+      if(msg.awaitedMsg instanceof ReadReqMsg){
+        ActorRef dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
+        dest.tell(errMsg, getSelf());
+      }else if(msg.awaitedMsg instanceof WriteReqMsg){
+        ((WriteReqMsg) msg.awaitedMsg).originator.tell(errMsg, getSelf());
+      }
+    }else{
+      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
     }
+  }
 
   // Here we define the mapping between the received message types and our actor methods
   @Override
@@ -234,8 +297,10 @@ public class Cache extends AbstractActor {
             .match(WriteReqMsg.class, this::onWriteReqMsg)
             .match(RefillMsg.class, this::onRefillMsg)
             .match(InternalStateMsg.class, this::onInternalStateMsg)
+            .match(IsStillParentReqMsg.class, this::onIsStillParentReqMsg)
             .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
             .match(CrashMsg.class, this::onCrashMsg)
+            .match(TimeoutMsg.class, this::onTimeoutMsg)
             .build();
   }
 

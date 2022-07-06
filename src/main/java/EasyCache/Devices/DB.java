@@ -81,6 +81,16 @@ public class DB extends AbstractActor {
     LOGGER.debug(sb);
   }
 
+  private void onAddChildMsg(AddChildMsg msg) {
+    if (!this.children.contains(msg.child))
+      this.children.add(msg.child);
+    StringBuilder sb = new StringBuilder();
+    for (ActorRef c: children) {
+      sb.append(c.path().name() + ";");
+    }
+    LOGGER.debug("DB; children_set_to: [" + sb + "]");
+  }
+
   private void multicast(Serializable m) {
     // multicast to all peers in the group (do not send any message to self)
     for (ActorRef p: children) {
@@ -99,6 +109,7 @@ public class DB extends AbstractActor {
   public Receive createReceive() {
     return receiveBuilder()
       .match(ReadReqMsg.class,    this::onReadReqMsg)
+      .match(AddChildMsg.class, this::onAddChildMsg)
       .match(WriteReqMsg.class,    this::onWriteReqMsg)
       .match(SetChildrenMsg.class,    this::onSetChildrenMsg)
       .match(InternalStateMsg.class,   this::onInternalStateMsg)
