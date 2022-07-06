@@ -19,7 +19,7 @@ public class ProjectRunner {
 
   private static final Logger LOGGER = LogManager.getLogger(ProjectRunner.class);
 
-  public static void main(String[] args) {
+  public static void main(String[] args){
 
     //Logging current run configuration
     Config.printConfig();
@@ -41,14 +41,14 @@ public class ProjectRunner {
     List<ActorRef> l1List = new ArrayList<ActorRef>();
     for (int i = 0; i < Config.N_L1; i++) {
       int id = i + 100;
-      l1List.add(system.actorOf(Cache.props(id, CacheType.L1), "L1_" + id));
+      l1List.add(system.actorOf(Cache.props(id, CacheType.L1, db), "L1_" + id));
     }
 
     // create the L2 caches
     List<ActorRef> l2List = new ArrayList<ActorRef>();
     for (int i = 0; i < Config.N_L2; i++) {
       int id = i + 200;
-      l2List.add(system.actorOf(Cache.props(id, CacheType.L2), "L2_" + id));
+      l2List.add(system.actorOf(Cache.props(id, CacheType.L2, db), "L2_" + id));
     }
 
     // create the clients
@@ -112,14 +112,14 @@ public class ProjectRunner {
     inputContinue();
 
     // let's make cache200 crash
-    LOGGER.info("Make Cache200 crash");
-    l2List.get(0).tell(new CrashMsg(), ActorRef.noSender());
+    LOGGER.info("Make Cache100 crash");
+    l1List.get(0).tell(new CrashMsg(), ActorRef.noSender());
 
     inputContinue();
 
     // client 300 asks for item 1
     LOGGER.info("Client300 asks for item 1");
-    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+    clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
 
     inputContinue();
 
@@ -136,8 +136,8 @@ public class ProjectRunner {
     inputContinue();
 
     // recover the cache 200
-    LOGGER.info("Recover Cache200");
-    l2List.get(0).tell(new RecoveryMsg(), ActorRef.noSender());
+    LOGGER.info("Recover Cache100");
+    l1List.get(0).tell(new RecoveryMsg(), ActorRef.noSender());
 
     inputContinue();
 
