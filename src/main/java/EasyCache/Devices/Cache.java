@@ -3,6 +3,7 @@ package EasyCache.Devices;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 import akka.actor.Props;
 import EasyCache.CacheType;
 
@@ -54,6 +55,15 @@ public class Cache extends AbstractActor {
   // This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
+    StringBuilder sb = new StringBuilder();
+    for (ActorRef c: children) {
+      sb.append(c.path().name() + ";");
+    }
+    LOGGER.debug("Cache " + this.id + "; children_set_to: [" + sb + "]");
+  }
+
+  private void onAddChildMsg(AddChildMsg msg) {
+    this.children.add(msg.child);
     StringBuilder sb = new StringBuilder();
     for (ActorRef c: children) {
       sb.append(c.path().name() + ";");
@@ -205,6 +215,8 @@ public class Cache extends AbstractActor {
   //this method is used to change the behaviour of the cache to crashed
     private void onCrashMsg(CrashMsg msg){
         LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+        //transactionsTimeout.values().forEach(Cancellable::cancel);
+        //transactionsTimeout.clear();
         getContext().become(crashed());
     }
 
@@ -213,6 +225,7 @@ public class Cache extends AbstractActor {
   public Receive createReceive() {
     return receiveBuilder()
             .match(SetChildrenMsg.class, this::onSetChildrenMsg)
+            .match(AddChildMsg.class, this::onAddChildMsg)
             .match(SetParentMsg.class, this::onSetParentMsg)
             .match(ReadReqMsg.class, this::onReadReqMsg)
             .match(ReadRespMsg.class, this::onReadRespMsg)

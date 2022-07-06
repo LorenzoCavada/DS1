@@ -59,7 +59,14 @@ public class Client extends AbstractActor {
   // This list will become useful when the crash will be introduced.
   private void onSetAvailL2Msg(SetAvailableL2Msg msg) {
     this.availableL2=msg.availL2;
-    LOGGER.debug("Client " + this.id + "; available_L2_set_to: " + msg.availL2 + ";");
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("Client " + this.id + "; available_L2_set_to: [");
+    for(ActorRef l2 : msg.availL2){
+      sb.append(l2.path().name() +  ", ");
+    }
+    sb.append("];");
+    LOGGER.debug(sb);
   }
 
   // This method is called when a ReadRespMsg is received.
@@ -88,8 +95,10 @@ public class Client extends AbstractActor {
 
   private void doNext(ReqMessage msg){
     if (msg instanceof DoReadMsg){
+      LOGGER.error("Client " + this.id + "; redo_read: " + msg.uuid + "; ");
       doReadReq((DoReadMsg) msg);
     }else if (msg instanceof DoWriteMsg){
+      LOGGER.error("Client " + this.id + "; redo_write: " + msg.uuid + "; ");
       doWriteReq((DoWriteMsg) msg);
     }
   }
@@ -129,7 +138,7 @@ public class Client extends AbstractActor {
       getContext().system().scheduler().scheduleOnce(
                 Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
                 getSelf(),                                          // destination actor reference
-                new TimeoutMsg(msgToSend),                                  // the message to send
+                new TimeoutMsg(msg),                                  // the message to send
                 getContext().system().dispatcher(),                 // system dispatcher
                 getSelf()                                           // source of the message (myself)
         ));
@@ -146,6 +155,8 @@ public class Client extends AbstractActor {
       }
       LOGGER.debug("Client " + this.id + "; new_parent_selected: " + availableL2.get(newParentIdx).path().name());
       this.parent=availableL2.get(newParentIdx);
+      AddChildMsg addMeMsg=new AddChildMsg(getSelf());
+      this.parent.tell(addMeMsg, getSelf());
       pendingReq.remove(msg.awaitedMsg.uuid);
       doNext(msg.awaitedMsg);
     }else{
@@ -159,12 +170,12 @@ public class Client extends AbstractActor {
   private void doWriteReq(DoWriteMsg msg){
     WriteReqMsg msgToSend = new WriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_write_request_for_item: " + msgToSend.key + " newValue: "+msgToSend.newValue);
+    LOGGER.debug("Client " + this.id + "; starting_write_request_for_item: " + msgToSend.key + " newValue: "+msgToSend.newValue + " msg_id: " + msg.uuid);
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
             Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
             getSelf(),                                          // destination actor reference
-            new TimeoutMsg(msgToSend),                                  // the message to send
+            new TimeoutMsg(msg),                                  // the message to send
             getContext().system().dispatcher(),                 // system dispatcher
             getSelf()                                           // source of the message (myself)
     ));
