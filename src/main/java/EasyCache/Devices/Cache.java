@@ -238,13 +238,17 @@ public class Cache extends AbstractActor {
     pendingReq.values().forEach(Cancellable::cancel);
     pendingReq.clear();
     savedItems.clear();
+
+    if(this.type==CacheType.L1){
+      //TODO una cache L1 che recovera deve dire ai suoi figli che sono ancora figli dopo il recover che devono aggiornare i propri item
+      //TODO con delle read in modo che eventuali write fatte da client ma non refillate perché la cache L1 era giù siano propagate
+    }
+
     for(ActorRef child: children){
       child.tell(new IsStillParentReqMsg(), getSelf());
     }
 
-    if(this.type==CacheType.L1){
-      //TODO
-    }
+
     getContext().become(createReceive());
   }
 
@@ -267,6 +271,9 @@ public class Cache extends AbstractActor {
       this.parent=this.db;
 
       LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name());
+      //TODO una cache L2 va in timeout e oltre a collegarsi al db fa una read dei propri item
+      //TODO questa read o è di tipo diverso da una read normale in quanto va modificato lo stack path o meglio il destinatario deve
+      //TODO essere una L2 e non un client
       AddChildMsg addMeMsg=new AddChildMsg(getSelf());
       this.parent.tell(addMeMsg, getSelf());
       pendingReq.remove(msg.awaitedMsg.uuid);
