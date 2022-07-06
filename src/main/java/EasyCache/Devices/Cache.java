@@ -5,12 +5,13 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import EasyCache.CacheType;
-import EasyCache.Messages.*;
 
 import java.io.Serializable;
 import java.util.*;
+
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+
 public class Cache extends AbstractActor {
 
   private Random rnd = new Random(); // Used to generate random value
@@ -48,22 +49,6 @@ public class Cache extends AbstractActor {
       catch (InterruptedException e) { e.printStackTrace(); }
 
     }
-  }
-
-  // Here we define the mapping between the received message types and our actor methods
-  @Override
-  public Receive createReceive() {
-    return receiveBuilder()
-      .match(SetChildrenMsg.class, this::onSetChildrenMsg)
-      .match(SetParentMsg.class, this::onSetParentMsg)
-      .match(ReadReqMsg.class, this::onReadReqMsg)
-      .match(ReadRespMsg.class, this::onReadRespMsg)
-      .match(CritReadReqMsg.class, this::onCritReadReqMsg)
-      .match(CritReadRespMsg.class, this::onCritReadRespMsg)
-      .match(WriteReqMsg.class, this::onWriteReqMsg)
-      .match(RefillMsg.class, this::onRefillMsg)
-      .match(InternalStateMsg.class, this::onInternalStateMsg)
-      .build();
   }
 
   // This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
@@ -194,4 +179,57 @@ public class Cache extends AbstractActor {
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());
   }
+
+  private void onRecoveryMsg(RecoveryMsg msg) {
+    LOGGER.debug("Cache " + this.id + "; recovers;");
+    pendingReq.clear();
+    savedItems.clear();
+    for(ActorRef child: children){
+      child.tell(new IsStillParentReqMsg(), getSelf());
+    }
+    if (this.type==CacheType.L2){
+      //TODO
+    }else if(this.type==CacheType.L1){
+      //TODO
+    }
+    getContext().become(createReceive());
+  }
+
+  private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
+    if (!msg.response){
+      LOGGER.debug("Cache " + this.id + "; is_not_parent_of: " + getSender().path().name() + ";");
+      children.remove(getSender());
+    }
+  }
+
+  // Here we define the mapping between the received message types and our actor methods
+  @Override
+  public Receive createReceive() {
+    return receiveBuilder()
+            .match(SetChildrenMsg.class, this::onSetChildrenMsg)
+            .match(SetParentMsg.class, this::onSetParentMsg)
+            .match(ReadReqMsg.class, this::onReadReqMsg)
+            .match(ReadRespMsg.class, this::onReadRespMsg)
+            .match(CritReadReqMsg.class, this::onCritReadReqMsg)
+            .match(CritReadRespMsg.class, this::onCritReadRespMsg)
+            .match(WriteReqMsg.class, this::onWriteReqMsg)
+            .match(RefillMsg.class, this::onRefillMsg)
+            .match(InternalStateMsg.class, this::onInternalStateMsg)
+            .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
+            .build();
+  }
+
+  final AbstractActor.Receive crashed() {
+    return receiveBuilder()
+            .match(RecoveryMsg.class, this::onRecoveryMsg)
+            .matchAny(msg -> LOGGER.debug(getSelf().path().name() + " ignoring " + msg.getClass().getSimpleName() + " (crashed)"))
+            .build();
+  }
+
+  /*final AbstractActor.Receive crashedL1() {
+    return receiveBuilder()
+            .match(RecoveryL1Msg.class, this::onRecoveryL1Msg)
+            .matchAny(msg -> LOGGER.debug(getSelf().path().name() + " ignoring " + msg.getClass().getSimpleName() + " (crashed)"))
+            .build();
+  }*/
 }
