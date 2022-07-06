@@ -202,6 +202,12 @@ public class Cache extends AbstractActor {
     }
   }
 
+  //this method is used to change the behaviour of the cache to crashed
+    private void onCrashMsg(CrashMsg msg){
+        LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+        getContext().become(crashed());
+    }
+
   // Here we define the mapping between the received message types and our actor methods
   @Override
   public Receive createReceive() {
@@ -216,6 +222,7 @@ public class Cache extends AbstractActor {
             .match(RefillMsg.class, this::onRefillMsg)
             .match(InternalStateMsg.class, this::onInternalStateMsg)
             .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
+            .match(CrashMsg.class, this::onCrashMsg)
             .build();
   }
 

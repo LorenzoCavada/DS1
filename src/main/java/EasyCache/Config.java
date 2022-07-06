@@ -9,7 +9,7 @@ public class Config implements Serializable {
 
     private static final Logger LOGGER = LogManager.getLogger(ProjectRunner.class);
 
-    final public static int N_L1 = 2; // number of L1 caches
+    final public static int N_L1 = 1; // number of L1 caches
     final public static int N_L2 = N_L1 * 2; // number of L2 caches
     final public static int N_CLIENT = N_L2 * 2; // number of clients
     final public static int N_ITEMS = 20; // number of items to be stored in the DB

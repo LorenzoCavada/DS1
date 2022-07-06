@@ -7,6 +7,7 @@ import EasyCache.Messages.*;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
@@ -52,9 +53,12 @@ public class ProjectRunner {
 
     // create the clients
     List<ActorRef> clientList = new ArrayList<ActorRef>();
+    // create the availableL2Msg for the client
+    SetAvailableL2Msg availableL2Msg = new SetAvailableL2Msg(l2List);
     for (int i = 0; i < Config.N_CLIENT; i++) {
       int id = i + 300;
       clientList.add(system.actorOf(Client.props(id), "Client_" + id));
+      clientList.get(i).tell(availableL2Msg, ActorRef.noSender());
     }
 
     // associate the L1 caches to the database
@@ -99,73 +103,51 @@ public class ProjectRunner {
     }
 
     // ---- END OF INITIALIZATION ----
+    inputContinue();
 
-    /*
-    // ---- HERE START THE RUN ----
-
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Printing the stating internal state of the node");
-
-    // check initial internal state of each node
-    InternalStateMsg internalState = new InternalStateMsg();
-    db.tell(internalState, ActorRef.noSender());
-    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
-    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
-
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Starting read operation");
-
-    // Client 300 asks for item 1
+    // client 300 asks for item 1
+    LOGGER.info("Client300 asks for item 1");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
 
-    // Client 301 asks for item 1
-    clientList.get(1).tell(new DoReadMsg(1), ActorRef.noSender());
+    inputContinue();
 
-    // Client 302 asks for item 1
-    clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
+    // let's make cache200 crash
+    LOGGER.info("Make Cache200 crash");
+    l2List.get(0).tell(new CrashMsg(), ActorRef.noSender());
 
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Printing internal state after read operations");
+    inputContinue();
 
-
-    // printing the internal state
-    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
-    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
-
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Starting the write operation");
-
-    // Client 303 asks for write 2 in item with key 1
-    clientList.get(3).tell(new DoWriteMsg(1, 2), ActorRef.noSender());
-
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Starting internal state after the write operation");
-
-    // printing the internal state
-    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
-    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
-
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Perform last read");
-
-    // Client 300 asks for item 1
+    // client 300 asks for item 1
+    LOGGER.info("Client300 asks for item 1");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
 
-    try { Thread.sleep(100); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    LOGGER.info("Ending the program");
+    inputContinue();
 
-    */
+    // check the parents of Cache 300
+    LOGGER.info("Check internal state of Cache 300");
+    clientList.get(0).tell(new InternalStateMsg(), ActorRef.noSender());
+
+    inputContinue();
+
+    // client 300 asks for item 1
+    LOGGER.info("Client300 asks for item 1");
+    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    inputContinue();
+
+    // recover the cache 200
+    LOGGER.info("Recover Cache200");
+    l2List.get(0).tell(new RecoveryMsg(), ActorRef.noSender());
+
+    inputContinue();
+
+    //check the internal state of cache 200
+    LOGGER.info("Check the internal state of Cache200");
+    l2List.get(0).tell(new InternalStateMsg(), ActorRef.noSender());
 
     // ---- HERE START THE RANDOM RUN ----
 
-    try { Thread.sleep(1000); }
+    /*try { Thread.sleep(1000); }
     catch (InterruptedException e) { e.printStackTrace(); }
 
     // Client 300 asks for item 1
@@ -201,6 +183,8 @@ public class ProjectRunner {
     LOGGER.info("Ending operation");
 
     // ---- HERE ENDS THE RANDOM RUN ----
+    */
+
     /*
     try {
 
@@ -209,5 +193,10 @@ public class ProjectRunner {
     } 
     catch (IOException ioe) {}*/
     system.terminate();
+  }
+
+  public static void inputContinue() {
+    try { Thread.sleep(2000); }
+    catch (InterruptedException e) { e.printStackTrace(); }
   }
 }
