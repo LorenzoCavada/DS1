@@ -10,14 +10,16 @@ import java.util.UUID;
 // This message will be originated by a client which will push its actorRef into the stack and than send the message to the L2 cache.
 // The L2 cache will push its actorRef into the stack and then send the message to the L1 cache.
 // The L1 cache will push its actorRef into the stack and then send the message to the DB.
-public class ReadReqMsg extends Message{
-    public final UUID uuid;
-    public final int key;   // key of requested item
+public class ReadReqMsg extends ReqMessage{
     public Stack<ActorRef> responsePath;
 
     public ReadReqMsg(int key) {
-        uuid = UUID.randomUUID();
-        this.key=key;
+        super(key);
+        this.responsePath=new Stack<>();
+    }
+
+    public ReadReqMsg(int key, UUID uuid) {
+        super(key, uuid);
         this.responsePath=new Stack<>();
     }
 }
