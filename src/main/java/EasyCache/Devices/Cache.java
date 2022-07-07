@@ -32,6 +32,12 @@ public class Cache extends AbstractActor {
   private static final Logger LOGGER = LogManager.getLogger(Cache.class);
   /* -- Actor constructor --------------------------------------------------- */
 
+  /**
+   * Constructor of the Cache actor.
+   * @param id represents the ID of the current actor.
+   * @param type represents the type of the current cache, may be L1 or L2.
+   * @param db represents the reference to the DB actor.
+   */
   public Cache(int id, CacheType type, ActorRef db) {
     this.id = id;
     this.type=type;
@@ -46,19 +52,43 @@ public class Cache extends AbstractActor {
 
   /* -- Actor behaviour ----------------------------------------------------- */
 
-  private void multicast(Serializable m) {
+  /* -- START OF Sending message methods ----------------------------------------------------- */
 
-    // multicast to all the children of the cache (do not send any message to self)
+  /**
+   * This method is used to send a message to a given actor, it will also simulate the network delays
+   * @param m is the message to send
+   * @param dest is the actorRef of the destination actor
+   */
+  private void sendMessage(Serializable m, ActorRef dest){
+    try { Thread.sleep(rnd.nextInt(10)); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    dest.tell(m, getSelf());
+  }
+
+  /**
+   * This method is used to send a message to all the children of the cache.
+   * The multicast will use Thread.sleep in order to simulate a network delay.
+   * @param m represents the message to be sent to the children.
+   */
+  private void multicast(Serializable m) {
     for (ActorRef p: children) {
       p.tell(m, getSelf());
-      // simulate network delays using sleep
       try { Thread.sleep(rnd.nextInt(10)); }
       catch (InterruptedException e) { e.printStackTrace(); }
 
     }
   }
 
-  // This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
+  /* -- END of Sending message methods ----------------------------------------------------- */
+
+
+
+  /* -- START OF configuration message methods ----------------------------------------------------- */
+
+  /**
+   * This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
+   * @param msg is the SetChildrenMsg message which contain the list of children of the cache.
+   */
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
     StringBuilder sb = new StringBuilder();
@@ -68,6 +98,11 @@ public class Cache extends AbstractActor {
     LOGGER.debug("Cache " + this.id + "; children_set_to: [" + sb + "]");
   }
 
+  /**
+   * This method is used to add a new children to the cache.
+   * This usually happen when a client detect the crash of its L2 cache and choose a new L2 cache.
+   * @param msg is the AddChildMsg message which contains the new children to add to the list of the children of the cache.
+   */
   private void onAddChildMsg(AddChildMsg msg) {
     if (!this.children.contains(msg.child))
       this.children.add(msg.child);
@@ -78,16 +113,31 @@ public class Cache extends AbstractActor {
     LOGGER.debug("Cache " + this.id + "; children_set_to: [" + sb + "]");
   }
 
-  // This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
+  /**
+   * This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
+   * @param msg is the SetParentMsg message which contains the reference to the parent of the cache.
+   */
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
     LOGGER.debug("Cache " + this.id + "; parent_set_to: " + msg.parent.path().name() + ";");
   }
 
-  // This method is used to handle the ReadReqMsg message that represent the read request message.
-  // This message can come both by a L2 cache or from a Client
-  // If the requested element is in the cache, the value associated to the key is returned to the requester
-  // Else the message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB
+  /* -- END of configuration message methods ----------------------------------------------------- */
+
+
+
+  /* -- START OF write and read message methods ----------------------------------------------------- */
+
+  /**
+   * This method is used to handle the ReadReqMsg message that represent the read request message.
+   * This message can come both by a L2 cache or from a Client.
+   * If the requested element is in the cache, the value associated to the key is returned to the requester.
+   * Else the message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB.
+   * The message also contains a stack with the path followed by the message. This is used to understand where to send the response.
+   * If the cache does not have the requested element, the message is forwarded to the parent and a timeout is started.
+   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
+   * @param msg is the ReadReqMsg message which contains the key of the element to be read.
+   */
   private void onReadReqMsg(ReadReqMsg msg){
     if(savedItems.containsKey(msg.key)){
       ActorRef nextHop=msg.responsePath.pop();
@@ -111,27 +161,30 @@ public class Cache extends AbstractActor {
     }
   }
 
-  // This method is used to handle the CritReadReqMsg message that represent the critical read request message.
-  // This message can come both by a L2 cache or from a Client
-  // We message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB
-  private void onCritReadReqMsg(CritReadReqMsg msg){
-    msg.responsePath.push(getSelf());
-    LOGGER.debug("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
-    pendingReq.put(msg.uuid,
-            getContext().system().scheduler().scheduleOnce(
-                    Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
-                    getSelf(),                                          // destination actor reference
-                    new TimeoutMsg(msg),                                  // the message to send
-                    getContext().system().dispatcher(),                 // system dispatcher
-                    getSelf()                                           // source of the message (myself)
-            )); //adding the uuid of the message to the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
-    sendMessage(msg, parent);
-
+  /**
+   * This method is used to handle the ReadRespMsg message which represent the read response message.
+   * After receiving a read response the cache needs to store the value in its memory and then will forward it to its children.
+   * Also, the timer connected to the request is cancelled and the request is removed from the list of the pending ones.
+   * @param msg is the ReadRespMsg message which contains value of the requested item.
+   */
+  private void onReadRespMsg(ReadRespMsg msg) {
+    Integer key = msg.key;
+    savedItems.put(key, msg.value);
+    ActorRef nextHop = msg.responsePath.pop();
+    LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    pendingReq.get(msg.uuid).cancel();
+    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+    sendMessage(msg, nextHop);
   }
 
-  // This method is used to handle the WriteReqMsg message which represent the write request message.
-  // A cache can only forward the request to its parent till it reach the DB.
+  /**
+   * This method is used to handle the WriteReqMsg message which represent the write request message.
+   * A cache can only forward the request to its parent till it reach the DB where the write will be applied.
+   * A timeout is also started.
+   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
+   * @param msg is the WriteReqMsg message which contains the key of the element to be written and the value to be written.
+   */
   private void onWriteReqMsg(WriteReqMsg msg){
     LOGGER.debug("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_id: " + msg.uuid + ";");
     pendingReq.put(msg.uuid,
@@ -146,20 +199,68 @@ public class Cache extends AbstractActor {
     sendMessage(msg, parent);
   }
 
-
-  // This method is used to handle the ReadRespMsg message which represent the read response message.
-  // After a read the cache needs to store the value in its memory and then forward it to its children
-  private void onReadRespMsg(ReadRespMsg msg) {
+  /**
+   * This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
+   * The cache will first check if the value is stored in its memory, in that case it will update it.
+   * Then, if the cache is a L1 cache, it will simply forward the message to all its children.
+   * If the cache is a L2 cache, it will check if the originator of the request is one of its children.
+   * If yes the L2 cache will send the confirmation of the write operation to the client.
+   * The request is also removed from the list of the pending ones and the timer associated to the request is cancelled.
+   * @param msg is the RefillMsg message which contains the key of the updated item and the new value.
+   */
+  private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
-    savedItems.put(key, msg.value);
-    ActorRef nextHop = msg.responsePath.pop();
-    LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
-    sendMessage(msg, nextHop);
+    if(savedItems.containsKey(key)){
+      LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
+      savedItems.put(key, msg.newValue);
+    }
+
+    if(this.type == CacheType.L1){
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+      multicast(msg);
+    }else if(this.type == CacheType.L2){
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+      ActorRef originator = msg.originator;
+      if(children.contains(originator)) {
+        WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
+        LOGGER.debug("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+        sendMessage(resp, originator);
+      }
+    }
   }
 
+  /**
+   * This method is used to handle the CritReadReqMsg message that represent the critical read request message.
+   * This message can come both by a L2 cache or from a Client and will always be forwarded to the parent.
+   * The response will follow the ResponsePath stack which will contains all the hop that the message has passed.
+   * A timeout is also started.
+   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
+   * @param msg is the CritReadReqMsg message which contains the key of the element to be read from the database.
+   */
+  private void onCritReadReqMsg(CritReadReqMsg msg){
+    msg.responsePath.push(getSelf());
+    LOGGER.debug("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_ID: " + msg.uuid + ";");
+    pendingReq.put(msg.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutMsg(msg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            )); //adding the uuid of the message to the list of the pending ones
+    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
+    sendMessage(msg, parent);
+  }
+
+  /**
+   * This method is used to handle the CritReadRespMsg message which represent the critical read response message.
+   * After receiving a critical read response the cache will also store or update the value in its memory and then will forward it to its children.
+   * Also, the timer connected to the request is cancelled and the request is removed from the list of the pending ones.
+   * @param msg is the CritReadRespMsg message which contains value of the requested item.
+   */
   private void onCritReadRespMsg(CritReadRespMsg msg) {
     Integer key = msg.key;
     savedItems.put(key, msg.value);
@@ -171,100 +272,20 @@ public class Cache extends AbstractActor {
     sendMessage(msg, nextHop);
   }
 
-  // This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
-  // The cache will first check if the value is stored in its memory, in that case will update it
-  // Then, if the cache is a L1 cache, it will simply forward the message to all its children
-  // If the cache is a L2 cache, it will check if the originator of the request is one of its children
-  // If yes the L2 cache will send the confirmation of the write operation to the client
-  private void onRefillMsg(RefillMsg msg) {
-    Integer key = msg.key;
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
-    if(savedItems.containsKey(key)){
-      LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
-      savedItems.put(key, msg.newValue);
-    }
-    if(this.type == CacheType.L1){
-      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-      multicast(msg);
-    }else if(this.type == CacheType.L2){
-      pendingReq.get(msg.uuid).cancel();
-      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-      ActorRef originator = msg.originator;
-      if(children.contains(originator)) {
-        WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
-        LOGGER.debug("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; forward_to: " + msg.originator.path().name() + "; MSG_id: " + msg.uuid + ";");
-        sendMessage(resp, originator);
-      }
-    }
-  }
+  /* -- END OF write and read message methods ----------------------------------------------------- */
 
 
-  // This methode is trigger when a InternalStateMsg is received.
-  // This methode will print the current state of the cache, so the saved item, the list of children and its parent
-  private void onInternalStateMsg(InternalStateMsg msg) {
-    StringBuilder sb = new StringBuilder();
-    sb.append("INTERNAL_STATE: Cache " + this.id + "; items: [");
-    for(Integer k : savedItems.keySet()){
-      sb.append(k + ":" + savedItems.get(k) + ";");
-    }
-    sb.append("]; children: [");
-    for(ActorRef ch : children){
-      sb.append(ch.path().name() + ";");
-    }
-    sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
-    LOGGER.debug(sb);
-  }
 
-  // This method is used to send a message to a given actor, is needed to simulate the network delays
-  private void sendMessage(Serializable m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(10)); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    dest.tell(m, getSelf());
-  }
+  /* -- START OF crash handling message methods --------------------------------------------------------- */
 
-  private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
-    ActorRef sender = getSender();
-    boolean response;
-    if(sender.equals(this.parent)){
-      response=true;
-    }else{
-      response=false;
-    }
-    sender.tell(new IsStillParentRespMsg(response), getSelf());
-  }
-
-  private void onRecoveryMsg(RecoveryMsg msg) {
-    LOGGER.debug("Cache " + this.id + "; recovers;");
-    pendingReq.values().forEach(Cancellable::cancel);
-    pendingReq.clear();
-    savedItems.clear();
-
-    if(this.type==CacheType.L1){
-      //TODO una cache L1 che recovera deve dire ai suoi figli che sono ancora figli dopo il recover che devono aggiornare i propri item
-      //TODO con delle read in modo che eventuali write fatte da client ma non refillate perché la cache L1 era giù siano propagate
-    }
-
-    for(ActorRef child: children){
-      child.tell(new IsStillParentReqMsg(), getSelf());
-    }
-
-
-    getContext().become(createReceive());
-  }
-
-  private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
-    if (!msg.response){
-      LOGGER.debug("Cache " + this.id + "; is_not_parent_of: " + getSender().path().name() + ";");
-      children.remove(getSender());
-    }
-  }
-
-  //this method is used to change the behaviour of the cache to crashed
-  private void onCrashMsg(CrashMsg msg){
-      LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
-      getContext().become(crashed());
-  }
-
+  /**
+   * This method is used to handle the TimeoutMsg message which represent the timeout of a message and is used to detect a crash.
+   * A timeout message is sent after that a response to a request is not received in a given time. This message contains a copy of the request message.
+   * Only an L2 cache can go in timeout as we assume that the database cannot crash.
+   * If a L2 cache detect the crash of its L1 cache it will set the database as its new parent and will notify the databsase of the change asking to add the cache to the list of its child.
+   * Then it will remove the request to the list of the pending one and will notify, throw an ReqErrorMsg to the originator of the request that the request has failed.
+   * @param msg is the TimeoutMsg message which contains a copy of the request that has failed.
+   */
   private void onTimeoutMsg(TimeoutMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
       LOGGER.debug("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " msg_id: " + msg.awaitedMsg.uuid);
@@ -290,7 +311,98 @@ public class Cache extends AbstractActor {
     }
   }
 
-  // Here we define the mapping between the received message types and our actor methods
+  /**
+   * This method is used to handle the RecoveryMsg message which is send by the main class of the program.
+   * After recovering the Cache will remove all its cached item and all its pending requests with the associated timer.
+   * Then it will check if the children are still its children, this is done by sending a IsStillParentReqMsg to each of its children.
+   * The behaviour of the cache is also restored to the normal behaviour.
+   * @param msg is the RecoveryMsg which is used to recover the crashed cache.
+   */
+  private void onRecoveryMsg(RecoveryMsg msg) {
+    LOGGER.debug("Cache " + this.id + "; recovers;");
+    pendingReq.values().forEach(Cancellable::cancel);
+    pendingReq.clear();
+    savedItems.clear();
+    if(this.type==CacheType.L1){
+      //TODO una cache L1 che recovera deve dire ai suoi figli che sono ancora figli dopo il recover che devono aggiornare i propri item
+      //TODO con delle read in modo che eventuali write fatte da client ma non refillate perché la cache L1 era giù siano propagate
+    }
+    for(ActorRef child: children){
+      child.tell(new IsStillParentReqMsg(), getSelf());
+    }
+    getContext().become(createReceive());
+  }
+
+  /**
+   * This method is used to handle the IsStillParentReqMsg message which is received by a L1 cache.
+   * After that a L1 cache recover it needs to understand if its children are still its children or if they have detected its crash and changed their parents with the db.
+   * This method is triggered only by a L2 cache and when a L1 parent cache recover.
+   * If the L2 cache did not detect the cache of its parent it will notify that is still its children, otherwise it will notify that is not its children anymore.
+   * @param msg is the IsStillParentReqMsg which is used to notify if the cache is still a children of a L1 cache after that it has recover.
+   */
+  private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
+    ActorRef sender = getSender();
+    boolean response;
+    if(sender.equals(this.parent)){
+      response=true;
+    }else{
+      response=false;
+    }
+    sender.tell(new IsStillParentRespMsg(response), getSelf());
+  }
+
+  /**
+   * This method is used to handle IsStillParentRespMsg message which is received by a L1 cache or a client.
+   * This message will notify to the cache if the children is stilla children, based on this the cache will remove or not the children from the list of its children.
+   * If the message is False that means that the children did not detect the crash of its parent.
+   * If the message is True that means that the children did detect the crash and has changed its parent.
+   * @param msg is the IsStillParentRespMsg message which contains the answer to the IsStillParentReqMsg request.
+   */
+  private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
+    if (!msg.response){
+      LOGGER.debug("Cache " + this.id + "; is_not_parent_of: " + getSender().path().name() + ";");
+      children.remove(getSender());
+    }
+  }
+
+  /**
+   * This method is used to change the behaviour of the cache to crashed.
+   * @param msg is the CrashMsg message which is sent by the main class and used to make crash a node.
+   */
+  private void onCrashMsg(CrashMsg msg){
+    LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+    getContext().become(crashed());
+  }
+
+  /* -- END OF crash handling message methods --------------------------------------------------------- */
+
+
+
+  /* -- BEGIN OF debug methods --------------------------------------------------------- */
+
+  /**
+   * This methode is trigger when a InternalStateMsg is received and is used for debug.
+   * This methode will print the current state of the cache, so the saved item, the list of children and its parent
+   * @param msg is the InternalStateMsg message, is an empty message used to print the internal state of the cache.
+   */
+  private void onInternalStateMsg(InternalStateMsg msg) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("INTERNAL_STATE: Cache " + this.id + "; items: [");
+    for(Integer k : savedItems.keySet()){
+      sb.append(k + ":" + savedItems.get(k) + ";");
+    }
+    sb.append("]; children: [");
+    for(ActorRef ch : children){
+      sb.append(ch.path().name() + ";");
+    }
+    sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
+    LOGGER.debug(sb);
+  }
+
+  /* -- END OF debug methods --------------------------------------------------------- */
+
+
+  // Here we define the mapping between the received message types and our actor methods in the normal behaviour
   @Override
   public Receive createReceive() {
     return receiveBuilder()
@@ -311,6 +423,7 @@ public class Cache extends AbstractActor {
             .build();
   }
 
+  // Here we define the mapping between the received message types and our actor methods in the crashed behaviour
   final AbstractActor.Receive crashed() {
     return receiveBuilder()
             .match(RecoveryMsg.class, this::onRecoveryMsg)

@@ -12,3 +12,8 @@ Added timeout to client and L2 cache. Each device now have a Map attributed wher
   If the timer finish while still waiting the response it is considered as a timeout and a `timeoutMsg` is sent to themselves.
 
 This `timeoutMsg` message will contain the request which timed out in order to be able to handle it in the best way possible.
+
+
+### 07/07/2022 - Lorenzo
+
+Modified comments of the cache code in order to be in the JavaDoc formats. Also I moved some methods in order to have a better understanding of the message handling.
