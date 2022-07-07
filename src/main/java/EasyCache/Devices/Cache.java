@@ -174,7 +174,7 @@ public class Cache extends AbstractActor {
     LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -195,7 +195,7 @@ public class Cache extends AbstractActor {
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             )); //adding the uuid of the message to the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
+    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
   }
 
@@ -296,15 +296,15 @@ public class Cache extends AbstractActor {
       //TODO questa read o è di tipo diverso da una read normale in quanto va modificato lo stack path o meglio il destinatario deve
       //TODO essere una L2 e non un client
       AddChildMsg addMeMsg=new AddChildMsg(getSelf());
-      this.parent.tell(addMeMsg, getSelf());
+      sendMessage(addMeMsg, this.parent);
       pendingReq.remove(msg.awaitedMsg.uuid);
 
       ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
       if(msg.awaitedMsg instanceof ReadReqMsg){
         ActorRef dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
-        dest.tell(errMsg, getSelf());
+        sendMessage(errMsg, dest);
       }else if(msg.awaitedMsg instanceof WriteReqMsg){
-        ((WriteReqMsg) msg.awaitedMsg).originator.tell(errMsg, getSelf());
+       sendMessage(errMsg, ((WriteReqMsg) msg.awaitedMsg).originator);
       }
     }else{
       LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
@@ -328,7 +328,7 @@ public class Cache extends AbstractActor {
       //TODO con delle read in modo che eventuali write fatte da client ma non refillate perché la cache L1 era giù siano propagate
     }
     for(ActorRef child: children){
-      child.tell(new IsStillParentReqMsg(), getSelf());
+      sendMessage(new IsStillParentReqMsg(), child);
     }
     getContext().become(createReceive());
   }
@@ -348,7 +348,7 @@ public class Cache extends AbstractActor {
     }else{
       response=false;
     }
-    sender.tell(new IsStillParentRespMsg(response), getSelf());
+    sendMessage(new IsStillParentRespMsg(response), sender);
   }
 
   /**
@@ -402,7 +402,9 @@ public class Cache extends AbstractActor {
   /* -- END OF debug methods --------------------------------------------------------- */
 
 
-  // Here we define the mapping between the received message types and our actor methods in the normal behaviour
+  /**
+   * Here we define the mapping between the received message types and our actor methods in the normal behaviour
+   */
   @Override
   public Receive createReceive() {
     return receiveBuilder()
@@ -423,7 +425,9 @@ public class Cache extends AbstractActor {
             .build();
   }
 
-  // Here we define the mapping between the received message types and our actor methods in the crashed behaviour
+  /**
+   * Here we define the mapping between the received message types and our actor methods in the crashed behaviour
+   */
   final AbstractActor.Receive crashed() {
     return receiveBuilder()
             .match(RecoveryMsg.class, this::onRecoveryMsg)
