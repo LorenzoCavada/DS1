@@ -218,8 +218,10 @@ public class Cache extends AbstractActor {
       multicast(msg);
     }else if(this.type == CacheType.L2){
       LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
-      pendingReq.get(msg.uuid).cancel();
-      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+      if (pendingReq.containsKey(msg.uuid)) {
+        pendingReq.get(msg.uuid).cancel();
+        pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+      }
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
         WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
@@ -485,6 +487,7 @@ public class Cache extends AbstractActor {
             .match(TimeoutMsg.class, this::onTimeoutMsg)
             .match(RefreshItemReqMsg.class, this::onRefreshItemReqMsg)
             .match(RefreshItemRespMsg.class, this::onRefreshItemRespMsg)
+            .match(StartRefreshMsg.class, this::onStartRefreshMsg)
             .build();
   }
 
