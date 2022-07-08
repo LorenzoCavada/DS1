@@ -61,6 +61,12 @@ public class Client extends AbstractActor {
     parent.tell(m, getSelf());
   }
 
+  private void sendMessage(Serializable m, ActorRef dest){
+    try { Thread.sleep(rnd.nextInt(10)); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    dest.tell(m, getSelf());
+  }
+
   /* -- END OF Sending message methods ----------------------------------------------------- */
 
 
@@ -294,7 +300,7 @@ public class Client extends AbstractActor {
     }else{
       response=false;
     }
-    sender.tell(new IsStillParentRespMsg(response), getSelf());
+    sendMessage(new IsStillParentRespMsg(response), getSender());
   }
 
   /* -- END OF crash handling message methods ----------------------------------------------------- */
