@@ -367,13 +367,6 @@ public class Cache extends AbstractActor {
    */
   private void onRecoveryMsg(RecoveryMsg msg) {
     LOGGER.debug("Cache " + this.id + "; recovers;");
-    pendingReq.values().forEach(Cancellable::cancel);
-    pendingReq.clear();
-    savedItems.clear();
-    if(this.type==CacheType.L1){
-      //TODO una cache L1 che recovera deve dire ai suoi figli che sono ancora figli dopo il recover che devono aggiornare i propri item
-      //TODO con delle read in modo che eventuali write fatte da client ma non refillate perché la cache L1 era giù siano propagate
-    }
     for(ActorRef child: children){
       sendMessage(new IsStillParentReqMsg(), child);
     }
@@ -399,17 +392,35 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle IsStillParentRespMsg message which is received by a L1 cache or a client.
-   * This message will notify to the cache if the children is stilla children, based on this the cache will remove or not the children from the list of its children.
-   * If the message is False that means that the children did not detect the crash of its parent.
-   * If the message is True that means that the children did detect the crash and has changed its parent.
+   * This method is used to handle IsStillParentRespMsg message which is received by a L2 cache or a client.
+   * This message will notify to the cache if a node that was a child before the crash is still a child after the recovery
+   * If the response is false, that means the previous child has changed its parent and so it's not a child of the cache anymore
+   * If the message is true, that means the previous child is still a child (it has not detected the crash) and so we
+   * tell it to refresh all it's items, because it could have missed some refill message originated by clients not in its subtree
    * @param msg is the IsStillParentRespMsg message which contains the answer to the IsStillParentReqMsg request.
    */
   private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
+
     if (!msg.response){
       LOGGER.debug("Cache " + this.id + "; is_not_parent_of: " + getSender().path().name() + ";");
       children.remove(getSender());
+    }else{
+      if(this.type==CacheType.L1){
+        StartRefreshMsg refreshMsg = new StartRefreshMsg();
+        sendMessage(refreshMsg, getSender());
+      }
     }
+  }
+
+  /**
+   * This method is used to handle StartRefreshMsg message which is received by a L1 cache
+   * This message will notify to a L2 cache that the L1 has recovered before L2 viewed the timeout
+   * The L2 cache starts to refill all its items, because it could have missed some refills
+   * @param msg is the StartRefreshMsg message.
+   */
+  private void onStartRefreshMsg(StartRefreshMsg msg){
+    LOGGER.debug("Cache " + this.id + "; start_refreshing_items " + ";");
+    refreshItems();
   }
 
   /**
@@ -418,6 +429,9 @@ public class Cache extends AbstractActor {
    */
   private void onCrashMsg(CrashMsg msg){
     LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+    pendingReq.values().forEach(Cancellable::cancel);
+    pendingReq.clear();
+    savedItems.clear();
     getContext().become(crashed());
   }
 
