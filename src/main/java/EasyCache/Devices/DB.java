@@ -53,10 +53,7 @@ public class DB extends AbstractActor {
    */
   private void multicast(Serializable m) {
     for (ActorRef p: children) {
-      p.tell(m, getSelf());
-      try { Thread.sleep(rnd.nextInt(10)); }
-      catch (InterruptedException e) { e.printStackTrace(); }
-
+      sendMessage(m, p);
     }
   }
 
