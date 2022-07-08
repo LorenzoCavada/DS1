@@ -105,45 +105,56 @@ public class ProjectRunner {
     // ---- END OF INITIALIZATION ----
     inputContinue();
 
+    // message for checking the internal state of the caches
+    InternalStateMsg internalState = new InternalStateMsg();
+
     // client 300 asks for item 1
     LOGGER.info("Client300 asks for item 1");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
 
     inputContinue();
 
-    // let's make cache200 crash
+    // let's make cache100 crash
     LOGGER.info("Make Cache100 crash");
     l1List.get(0).tell(new CrashMsg(), ActorRef.noSender());
 
     inputContinue();
 
-    // client 300 asks for item 1
-    LOGGER.info("Client300 asks for item 1");
-    clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
+    // client 302 asks for item 1
+    LOGGER.info("Client302 asks for item 1");
+    clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
 
     inputContinue();
 
-    // check the parents of Cache 300
-    LOGGER.info("Check internal state of Cache 300");
-    clientList.get(0).tell(new InternalStateMsg(), ActorRef.noSender());
+    // check the internal state of the cache -> Cache 201 should now be connected to the database
+    LOGGER.info("Check internal state of Cache");
+    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
 
     inputContinue();
 
-    // client 300 asks for item 1
-    LOGGER.info("Client300 asks for item 1");
+    // client 302 asks for a write to item 1
+    LOGGER.info("Client302 asks for a write to item 1");
+    clientList.get(2).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
+
+    inputContinue();
+
+    // Client 300 asks for item 2 -> this will allow the Cache 200 to detect the crash of Cache 100
+    LOGGER.info("Client 300 asks for item 2 ");
+    clientList.get(0).tell(new DoReadMsg(2), ActorRef.noSender());
+
+    inputContinue();
+
+    // check the internal state of the cache -> Cache 200 should now be connected to the database and have refreshed the memory
+    LOGGER.info("Check internal state of Cache");
+    l1List.forEach(cacheL1 -> cacheL1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(cacheL2 -> cacheL2.tell(internalState, ActorRef.noSender()));
+
+    inputContinue();
+
+    // Client 300 asks for item 1 -> should see the last read from client 302 (item:1 - value:5)
+    LOGGER.info("Client 300 asks for item 1 ");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
-
-    inputContinue();
-
-    // recover the cache 200
-    LOGGER.info("Recover Cache100");
-    l1List.get(0).tell(new RecoveryMsg(), ActorRef.noSender());
-
-    inputContinue();
-
-    //check the internal state of cache 200
-    LOGGER.info("Check the internal state of Cache200");
-    l2List.get(0).tell(new InternalStateMsg(), ActorRef.noSender());
 
     // ---- HERE START THE RANDOM RUN ----
 
@@ -195,8 +206,13 @@ public class ProjectRunner {
     system.terminate();
   }
 
+  public static void inputContinue(int delay) {
+    try { Thread.sleep(delay); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+  }
+
   public static void inputContinue() {
-    try { Thread.sleep(2000); }
+    try { Thread.sleep(1000); }
     catch (InterruptedException e) { e.printStackTrace(); }
   }
 }

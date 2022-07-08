@@ -109,6 +109,7 @@ public class DB extends AbstractActor {
    */
   private void onWriteReqMsg(WriteReqMsg msg){
     Integer key = msg.key;
+    items.put(key, msg.newValue);
     RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
     LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; write_performed");
     multicast(resp);
@@ -136,6 +137,21 @@ public class DB extends AbstractActor {
     LOGGER.debug("DB; adding_new_child: " + msg.child.path().name() + "; new_children_list: [" + sb + "];");
   }
 
+  /**
+   * This method is called when a ReadReqMsg is received.
+   * The DB will get the ActorRef to which he needs to send the response by popping the first element of the responsePath contained in the request.
+   * The responsePath is the list of the ActorRefs that the message has gone through.
+   * Then the DB will get the requested item from its memory.
+   * After that it will create the response message and then send it.
+   * @param msg
+   */
+  private void onRefreshItemReqMsg(RefreshItemReqMsg msg){
+    ActorRef nextHop = msg.responsePath.pop();
+    Integer key = msg.key;
+    RefreshItemRespMsg resp = new RefreshItemRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
+    LOGGER.debug("DB " + this.id + "; refresh_request_received_from: " + nextHop.path().name() + "; key: " + key + "; refresh_response_sent;");
+    sendMessage(resp, nextHop);
+  }
   /* -- END OF crash handling message methods ----------------------------------------------------- */
 
 
@@ -174,6 +190,7 @@ public class DB extends AbstractActor {
       .match(WriteReqMsg.class,    this::onWriteReqMsg)
       .match(SetChildrenMsg.class,    this::onSetChildrenMsg)
       .match(InternalStateMsg.class,   this::onInternalStateMsg)
+      .match(RefreshItemReqMsg.class,   this::onRefreshItemReqMsg)
       .build();
   }
 }

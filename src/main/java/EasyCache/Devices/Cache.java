@@ -220,7 +220,7 @@ public class Cache extends AbstractActor {
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       multicast(msg);
     }else if(this.type == CacheType.L2){
-      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       pendingReq.get(msg.uuid).cancel();
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       ActorRef originator = msg.originator;
@@ -290,24 +290,74 @@ public class Cache extends AbstractActor {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
       LOGGER.debug("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " msg_id: " + msg.awaitedMsg.uuid);
       this.parent=this.db;
+      LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name() + "; refreshing_the_cache;");
 
-      LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name());
-      //TODO una cache L2 va in timeout e oltre a collegarsi al db fa una read dei propri item
-      //TODO questa read o è di tipo diverso da una read normale in quanto va modificato lo stack path o meglio il destinatario deve
-      //TODO essere una L2 e non un client
+      refreshItems();
+
       AddChildMsg addMeMsg=new AddChildMsg(getSelf());
       sendMessage(addMeMsg, this.parent);
       pendingReq.remove(msg.awaitedMsg.uuid);
 
       ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
+
       if(msg.awaitedMsg instanceof ReadReqMsg){
         ActorRef dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
+        // POSSIBLE REFACTOR TO REMOVE THE FACT THAT THE AWAITED REQUEST IS PASSED BY REFERENCE CAUSING THE RESPONSE PATH TO HAVE THE L2 CACHE ON TOP OF THE STACK
+        if(dest.equals(getSelf())) // the response stack of the failed request contain on the top the cache itself so we need to pop 2 times in order to get the reference of the next hop
+          dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
+
+        LOGGER.debug("Cache " + this.id + "; sending_read_error_message_to: " + dest.path().name() + "; for_MSG_id: " + msg.awaitedMsg.uuid + ";");
         sendMessage(errMsg, dest);
       }else if(msg.awaitedMsg instanceof WriteReqMsg){
-       sendMessage(errMsg, ((WriteReqMsg) msg.awaitedMsg).originator);
+        LOGGER.debug("Cache " + this.id + "; sending_write_error_message_to: " + ((WriteReqMsg) msg.awaitedMsg).originator.path().name() + "; for_MSG_id: " + msg.awaitedMsg.uuid + ";");
+        sendMessage(errMsg, ((WriteReqMsg) msg.awaitedMsg).originator);
       }
     }else{
-      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
+      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key + ";");
+    }
+  }
+
+  /**
+   * This method is used to refresh the saved items of the cache.
+   * This may be needed when the cache detect the crash of its L1 parent cache or when the L1 parent cache recover from a crash.
+   */
+  private void refreshItems(){
+    LOGGER.debug("Cache " + this.id + "; refreshing_cache_using_parent: " + this.parent.path().name() + ";");
+    for(int i : savedItems.keySet()){
+      LOGGER.debug("Cache " + this.id + "; send_refresh_req_for_item: " + i + ";");
+      RefreshItemReqMsg refreshReq = new RefreshItemReqMsg(i);
+      refreshReq.responsePath.push(getSelf());
+      sendMessage(refreshReq, this.parent);
+    }
+  }
+
+  /**
+   * This method is used to handle the RefreshItemReqMsg message which represent the request to refresh an item in the cache.
+   * This message is sent from a L2 cache to a L1 cache when the latter recover from the crash.
+   * After the recovery, the L1 cache will lose all its saved items and will check which L2 cache is still its children.
+   * To this cache the L1 cache will ask to refresh the memory in order to ensure that they will have the latest value.
+   * In this way the L1 cache will be able also to restore its memory.
+   * @param msg
+   */
+  private void onRefreshItemReqMsg(RefreshItemReqMsg msg){
+    LOGGER.debug("Cache " + this.id + "; forwarding_refresh_req_for_item: " + msg.key + ";");
+    msg.responsePath.push(getSelf());
+    sendMessage(msg, this.parent);
+  }
+
+  /**
+   * This method is used to handle the RefreshItemRespMsg message which represent the response to a request to refresh an item in the cache.
+   * This message may arrive from the DB to a L1 or L2 cache or from a L1 cache to a L2 cache.
+   * In the first case the L1 cache will update its memory with the value of the item and then will forward the message to the next hop which is one of its children.
+   * In the second case the L2 cache will update its memory with the value received but there won't be any next hop to forward the message.
+   * @param msg
+   */
+  private void onRefreshItemRespMsg(RefreshItemRespMsg msg) {
+    LOGGER.debug("Cache " + this.id + "; refreshing_item_in_cache: " + msg.key + "; setting_value: " + msg.value + "; refresh_completed;");
+    savedItems.put(msg.key, msg.value);
+    if (!msg.responsePath.isEmpty()) {
+      ActorRef nextHop = msg.responsePath.pop();
+      sendMessage(msg, nextHop);
     }
   }
 
@@ -422,6 +472,8 @@ public class Cache extends AbstractActor {
             .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
             .match(CrashMsg.class, this::onCrashMsg)
             .match(TimeoutMsg.class, this::onTimeoutMsg)
+            .match(RefreshItemReqMsg.class, this::onRefreshItemReqMsg)
+            .match(RefreshItemRespMsg.class, this::onRefreshItemRespMsg)
             .build();
   }
 

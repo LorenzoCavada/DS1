@@ -211,7 +211,7 @@ public class Client extends AbstractActor {
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled");
+    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
     if (!this.waitingReqs.isEmpty()){
       ReqMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
