@@ -108,9 +108,9 @@ public class ProjectRunner {
     // message for checking the internal state of the caches
     InternalStateMsg internalState = new InternalStateMsg();
 
-    // client 300 asks for item 1
-    LOGGER.info("Client300 asks for item 1");
-    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+    // client 300 critical asks for item 1
+    LOGGER.info("Client300 critical asks for item 1");
+    clientList.get(0).tell(new DoCritReadMsg(1), ActorRef.noSender());
 
     inputContinue();
 

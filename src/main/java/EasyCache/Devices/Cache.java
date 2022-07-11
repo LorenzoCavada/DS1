@@ -153,7 +153,8 @@ public class Cache extends AbstractActor {
                       getSelf()                                           // source of the message (myself)
               )); //adding the uuid of the message to the list of the pending ones
       msg.responsePath.push(getSelf());
-      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
+      if(Config.VERBOSE_LOG)
+        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
       sendMessage(msg, parent);
     }
   }
@@ -171,7 +172,8 @@ public class Cache extends AbstractActor {
     LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+    if(Config.VERBOSE_LOG)
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -192,7 +194,8 @@ public class Cache extends AbstractActor {
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             )); //adding the uuid of the message to the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
+    if(Config.VERBOSE_LOG)
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
   }
 
@@ -213,11 +216,13 @@ public class Cache extends AbstractActor {
     }
 
     if(this.type == CacheType.L1){
-      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+      if(Config.VERBOSE_LOG)
+        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       multicast(msg);
     }else if(this.type == CacheType.L2){
-      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      if(Config.VERBOSE_LOG)
+        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       if (pendingReq.containsKey(msg.uuid)) {
         pendingReq.get(msg.uuid).cancel();
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
@@ -250,7 +255,8 @@ public class Cache extends AbstractActor {
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             )); //adding the uuid of the message to the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; adding_req_id: " + msg.uuid + ";");
+    if(Config.VERBOSE_LOG)
+      LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
     sendMessage(msg, parent);
   }
 
@@ -267,7 +273,8 @@ public class Cache extends AbstractActor {
     LOGGER.debug("Cache " + this.id + "; crit_read_resp_for_item = " + msg.key + "; forward_to " + nextHop.path().name() + "; MSG_id: " + msg.uuid + "; timeout_cancelled;");
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-    LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq + "; remove_req_id: " + msg.uuid + ";");
+    if(Config.VERBOSE_LOG)
+     LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
     sendMessage(msg, nextHop);
   }
 
@@ -458,7 +465,7 @@ public class Cache extends AbstractActor {
     for(ActorRef ch : children){
       sb.append(ch.path().name() + ";");
     }
-    sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq);
+    sb.append("]; Parent: " + parent.path().name() + "; Pending request: " + pendingReq.keySet());
     LOGGER.debug(sb);
   }
 

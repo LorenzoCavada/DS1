@@ -20,6 +20,7 @@ public class Config implements Serializable {
 
     final public static int TIMEOUT_CLIENT = 1000; //client goes in timeout after 1000 ms
 
+    final public static boolean VERBOSE_LOG = false; //if true, prints verbose log messages
     // Method to print the current run configuration
     public static void printConfig(){
         LOGGER.info("N_L1: " + N_L1);
@@ -29,5 +30,6 @@ public class Config implements Serializable {
         LOGGER.info("RECOVER_DELAY: " + RECOVERY_DELAY);
         LOGGER.info("TIMEOUT_CACHE: " + TIMEOUT_CACHE);
         LOGGER.info("TIMEOUT_CLIENT: " + TIMEOUT_CLIENT);
+        LOGGER.info("VERBOSE_LOG: " + VERBOSE_LOG);
     }
 }

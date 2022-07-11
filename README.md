@@ -23,4 +23,8 @@ Changed some methods which was directly using `.tell()` to send messages and, so
 
 ### 08/07/2022 - Lorenzo
 
-Added the refresh procedure to a L2 cache that detects the crash of its L1 parent.
+Added the refresh procedure to a L2 cache that detects the crash of its L1 parent. Also check the code with Alessandro
+
+### 10/07/2022 - Lorenzo
+
+Finished the critical read method. Also added a verbose log mode.

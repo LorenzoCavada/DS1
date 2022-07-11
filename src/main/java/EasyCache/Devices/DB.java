@@ -100,6 +100,23 @@ public class DB extends AbstractActor {
   }
 
   /**
+   * This method is called when a CriticalReadReqMsg is received.
+   * The DB will get the ActorRef to which he needs to send the response by popping the first element of the responsePath contained in the request.
+   * The responsePath is the list of the ActorRefs that the message has gone through.
+   * Then the DB will get the requested item from its memory.
+   * After that it will create the response message and then send it.
+   * Actually is the same as a ReadReqMsg but the result of the read is inserted in a different message which trigger a different handling of the message.
+   * @param msg
+   */
+  private void onCritReadReqMsg(CritReadReqMsg msg){
+    ActorRef nextHop = msg.responsePath.pop();
+    Integer key = msg.key;
+    CritReadRespMsg resp = new CritReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
+    LOGGER.debug("DB " + this.id + "; critical_read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; critical_read_response_sent;");
+    sendMessage(resp, nextHop);
+  }
+
+  /**
    * This method is called when a WriteReqMsg is received.
    * The DB will update the item with the new value and then will send a Refill message to all its children.
    * @param msg is the WriteReqMsg message which contains the key and the value to be updated.
@@ -188,6 +205,7 @@ public class DB extends AbstractActor {
       .match(SetChildrenMsg.class,    this::onSetChildrenMsg)
       .match(InternalStateMsg.class,   this::onInternalStateMsg)
       .match(RefreshItemReqMsg.class,   this::onRefreshItemReqMsg)
+      .match(CritReadReqMsg.class,   this::onCritReadReqMsg)
       .build();
   }
 }

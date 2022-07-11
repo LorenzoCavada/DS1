@@ -17,4 +17,8 @@ public class CritReadReqMsg extends ReqMessage{
         super(key);
         this.responsePath=new Stack<>();
     }
+    public CritReadReqMsg(int key, UUID uuid) {
+        super(key, uuid);
+        this.responsePath=new Stack<>();
+    }
 }

@@ -167,6 +167,66 @@ public class Client extends AbstractActor {
   }
 
   /**
+   * This method is called when a DoReadMsg is received.
+   * It is used to trigger the read process by providing the key of the item to read.
+   * Is used for debug purposes.
+   * First will check if there are some pending requests, if so it will add the request to the waiting list.
+   * If there are not pending requests, it will trigger the read request.
+   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   */
+  private void onDoCritReadMsg(DoCritReadMsg msg){
+    if (this.pendingReq.size()>0){
+      this.waitingReqs.add(msg);
+    }else{
+      doCritRead(msg);
+    }
+  }
+
+  /**
+   * This method will perform the actual critical read operation.
+   * First the client will create a CritReadReqMsg and will push himself into the responsePath.
+   * Then it will send the CritReadReqMsg to the parent node.
+   * The client will also add this request to the list of the pending one. in this way it will not send new request until this is finished.
+   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
+   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
+   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
+   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   */
+  private void doCritRead(DoCritReadMsg msg) {
+    CritReadReqMsg msgToSend = new CritReadReqMsg(msg.key, msg.uuid);
+    msgToSend.responsePath.push(getSelf());
+    sendMessage(msgToSend);
+    LOGGER.debug("Client " + this.id + "; starting_critical_read_request_for_item: " + msgToSend.key + "; MSG_id: " + msgToSend.uuid + ";");
+    pendingReq.put(msgToSend.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutMsg(msg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            ));
+
+  }
+
+  /**
+   * This method is called when a CritReadRespMsg is received.
+   * It is used to print the result of a critical read request.
+   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
+   * After printing the result, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
+   * This is done to ensure that a client will send a request only when the previous one is finished.
+   * @param msg ReadRespMsg message which contains the result of the read request.
+   */
+  private void onCritReadRespMsg(CritReadRespMsg msg) {
+    pendingReq.get(msg.uuid).cancel();
+    pendingReq.remove(msg.uuid);
+    LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    if (!this.waitingReqs.isEmpty()){
+      ReqMessage nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
+  }
+
+  /**
    * This method is called when a DoWriteMsg is received.
    * It is used to trigger the write process by providing the key of the item to update and the newValue.
    * Is used for debug purposes.
@@ -336,6 +396,9 @@ public class Client extends AbstractActor {
       .match(TimeoutMsg.class, this::onTimeoutMsg)
       .match(InternalStateMsg.class, this::onInternalStateMsg)
       .match(ReqErrorMsg.class, this::onReqErrorMsg)
+      .match(DoCritReadMsg.class, this::onDoCritReadMsg)
+      .match(DoCritReadMsg.class, this::onDoCritReadMsg)
+      .match(CritReadRespMsg.class, this::onCritReadRespMsg)
       .build();
   }
 }
