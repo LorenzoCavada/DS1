@@ -285,6 +285,64 @@ public class Client extends AbstractActor {
   }
 
   /**
+   * This method is called when a DoWriteMsg is received.
+   * It is used to trigger the write process by providing the key of the item to update and the newValue.
+   * Is used for debug purposes.
+   * First will check if there are some pending requests, if so it will add the request to the waiting list.
+   * If there are not pending requests, it will trigger the read request.
+   * @param msg is the DoReadMsg message which contains the key of the item to update and the newValue.
+   */
+  private void onDoCritWriteMsg(DoCritWriteMsg msg){
+    if(this.pendingReq.size()>0){
+      this.waitingReqs.add(msg);
+    }else{
+      doCritWriteReq(msg);
+    }
+  }
+
+  /**
+   * This method will perform the actual write operation.
+   * First the client will create a WriteReqMsg specifying himself as originator.
+   * Then it will send the WriteReqMsg to the parent node.
+   * The client will also add this request to the list of the pending one. In this way it will not send new request until this is finished.
+   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
+   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
+   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
+   * @param msg is the DoWriteMsg message which contains the key of the item to write and the new value to set.
+   */
+  private void doCritWriteReq(DoCritWriteMsg msg){
+    CritWriteReqMsg msgToSend = new CritWriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
+    sendMessage(msgToSend);
+    LOGGER.debug("Client " + this.id + "; starting_crit_write_request_for_item: " + msgToSend.key + " newValue: "+msgToSend.newValue + " msg_id: " + msg.uuid);
+    pendingReq.put(msgToSend.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutMsg(msg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            ));
+  }
+
+  /**
+   * This method is called when a onWriteConfirmMsg is received.
+   * It is used to print the result of a write request.
+   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
+   * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
+   * This is done to ensure that a client will send a request only when the previous one is finished.
+   * @param msg is the WriteConfirmMsg message which contains the result of the write request.
+   */
+  private void onCritWriteConfirmMsg(CritWriteConfirmMsg msg){
+    pendingReq.get(msg.uuid).cancel();
+    pendingReq.remove(msg.uuid);
+    LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
+    if (!this.waitingReqs.isEmpty()){
+      ReqMessage nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
+  }
+
+  /**
    * This method is used to perform the next request in the waiting list.
    * The message passed need to be casted in the right message in order to be sent.
    * @param msg is a ReqMessage which can be a DoReadMsg or a DoWriteMsg. This is why a cast is needed.
@@ -294,6 +352,10 @@ public class Client extends AbstractActor {
       doReadReq((DoReadMsg) msg);
     }else if (msg instanceof DoWriteMsg){
       doWriteReq((DoWriteMsg) msg);
+    }else if(msg instanceof DoCritReadMsg){
+      doCritRead((DoCritReadMsg) msg);
+    }else if(msg instanceof DoCritWriteMsg){
+      doCritWriteReq((DoCritWriteMsg) msg);
     }
   }
 
@@ -397,8 +459,9 @@ public class Client extends AbstractActor {
       .match(InternalStateMsg.class, this::onInternalStateMsg)
       .match(ReqErrorMsg.class, this::onReqErrorMsg)
       .match(DoCritReadMsg.class, this::onDoCritReadMsg)
-      .match(DoCritReadMsg.class, this::onDoCritReadMsg)
+      .match(DoCritWriteMsg.class, this::onDoCritWriteMsg)
       .match(CritReadRespMsg.class, this::onCritReadRespMsg)
+      .match(CritWriteConfirmMsg.class, this::onCritWriteConfirmMsg)
       .build();
   }
 }

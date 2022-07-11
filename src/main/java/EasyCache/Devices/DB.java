@@ -1,15 +1,19 @@
 package EasyCache.Devices;
 
+import EasyCache.Config;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 import akka.actor.Props;
 import EasyCache.Messages.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import scala.concurrent.duration.Duration;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class DB extends AbstractActor {
   private Random rnd = new Random();
@@ -18,6 +22,12 @@ public class DB extends AbstractActor {
 
   private HashMap<Integer, Integer> items;
 
+  private Map<UUID, Set<ActorRef>> receivedInvalidAck;
+
+  private Map<UUID, Cancellable> invalidAckTimeouts;
+
+  private Map<UUID, CritWriteReqMsg> critWrites; //we need this data structure because crit write is composed of many messages
+
   private static final Logger LOGGER = LogManager.getLogger(DB.class);
 
   /* -- Actor constructor --------------------------------------------------- */
@@ -25,7 +35,9 @@ public class DB extends AbstractActor {
   public DB(HashMap<Integer, Integer> items) {
     this.items=new HashMap<>();
     this.items.putAll(items);
-
+    this.receivedInvalidAck=new HashMap<>();
+    this.invalidAckTimeouts=new HashMap<>();
+    this.critWrites =new HashMap<>();
   }
   static public Props props(HashMap<Integer, Integer> items) {
     return Props.create(DB.class, () -> new DB(items));
@@ -114,6 +126,76 @@ public class DB extends AbstractActor {
     CritReadRespMsg resp = new CritReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     LOGGER.debug("DB " + this.id + "; critical_read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; critical_read_response_sent;");
     sendMessage(resp, nextHop);
+  }
+
+  /**
+   * This method is called when a CritWriteReqMsg is received.
+   * The DB will update the item with the new value and then will send a Refill message to all its children.
+   * @param msg is the CritWriteReqMsg message which contains the key and the value to be updated.
+   */
+  private void onCritWriteReqMsg(CritWriteReqMsg msg){
+    Integer key = msg.key;
+    //items.put(key, msg.newValue);
+    //RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
+    LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; sending_invalidation");
+
+    this.critWrites.put(msg.uuid, msg);
+    InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
+
+    invalidAckTimeouts.put(msg.uuid,
+            getContext().system().scheduler().scheduleOnce(
+                    Duration.create(Config.TIMEOUT_DB_INVALIDATION, TimeUnit.MILLISECONDS),        // when to send the message
+                    getSelf(),                                          // destination actor reference
+                    new TimeoutInvalidAckMsg(invalidMsg),                                  // the message to send
+                    getContext().system().dispatcher(),                 // system dispatcher
+                    getSelf()                                           // source of the message (myself)
+            )); //adding the uuid of the message to the list of the pending ones
+    multicast(invalidMsg);
+  }
+
+  private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
+    LOGGER.debug("DB " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from " + getSender().path().name() + ";");
+    if(this.receivedInvalidAck.containsKey(msg.uuid)){
+      this.receivedInvalidAck.get(msg.uuid).add(getSender());
+    }else{
+      this.receivedInvalidAck.put(msg.uuid, new HashSet<>());
+      this.receivedInvalidAck.get(msg.uuid).add(getSender());
+    }
+
+    if(this.receivedInvalidAck.get(msg.uuid).size()==this.children.size()){
+      this.invalidAckTimeouts.get(msg.uuid).cancel();
+      CritWriteReqMsg associatedReq=this.critWrites.get(msg.uuid);
+      items.put(associatedReq.key, associatedReq.newValue);
+      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + ";");
+      CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
+      multicast(resp);
+      this.receivedInvalidAck.get(msg.uuid).clear();
+      this.receivedInvalidAck.remove(msg.uuid);
+      this.invalidAckTimeouts.remove(msg.uuid);
+    }
+
+  }
+
+  private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
+    LOGGER.debug("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
+    //check for akka bugs
+    if(this.receivedInvalidAck.get(msg.awaitedMsg.uuid).size()==this.children.size()){
+      this.invalidAckTimeouts.get(msg.awaitedMsg.uuid).cancel();
+      CritWriteReqMsg associatedReq=this.critWrites.get(msg.awaitedMsg.uuid);
+      items.put(associatedReq.key, associatedReq.newValue);
+      CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
+      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + ";");
+      multicast(resp);
+      this.receivedInvalidAck.get(msg.awaitedMsg.uuid).clear();
+      this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
+      this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
+    }else{
+      this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
+      this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
+      LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + ";");
+      //CritWriteError resp = new CritWriteError(associatedReq.key, associatedReq.originator, associatedReq.uuid)
+      //multicast(resp)
+    }
   }
 
   /**
@@ -206,6 +288,8 @@ public class DB extends AbstractActor {
       .match(InternalStateMsg.class,   this::onInternalStateMsg)
       .match(RefreshItemReqMsg.class,   this::onRefreshItemReqMsg)
       .match(CritReadReqMsg.class,   this::onCritReadReqMsg)
+      .match(CritWriteReqMsg.class,   this::onCritWriteReqMsg)
+      .match(InvalidationItemConfirmMsg.class,   this::onInvalidationItemConfirmMsg)
       .build();
   }
 }
