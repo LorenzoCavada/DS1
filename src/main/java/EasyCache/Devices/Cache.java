@@ -207,14 +207,16 @@ public class Cache extends AbstractActor {
       sendMessage(errMsg, getSender());
     }else {
       LOGGER.debug("Cache " + this.id + "; write_req_for_item: " + msg.key + "; forward_to_parent: " + parent.path().name() + "; MSG_id: " + msg.uuid + ";");
-      pendingReq.put(msg.uuid,
-              getContext().system().scheduler().scheduleOnce(
-                      Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
-                      getSelf(),                                          // destination actor reference
-                      new TimeoutMsg(msg),                                  // the message to send
-                      getContext().system().dispatcher(),                 // system dispatcher
-                      getSelf()                                           // source of the message (myself)
-              )); //adding the uuid of the message to the list of the pending ones
+      if(this.type == CacheType.L2) { //if the cache is an L2 cache, the write request is associated with a timer to detect the potential crash of its parent
+        pendingReq.put(msg.uuid,
+                getContext().system().scheduler().scheduleOnce(
+                        Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                        getSelf(),                                          // destination actor reference
+                        new TimeoutMsg(msg),                                  // the message to send
+                        getContext().system().dispatcher(),                 // system dispatcher
+                        getSelf()                                           // source of the message (myself)
+                ));
+      }
       if (Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
       sendMessage(msg, parent);
@@ -240,6 +242,7 @@ public class Cache extends AbstractActor {
     if(this.type == CacheType.L1){
       if(Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      // pendingReq.get(msg.uuid).cancel();
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       multicast(msg);
     }else if(this.type == CacheType.L2){
@@ -348,8 +351,18 @@ public class Cache extends AbstractActor {
     }
   }
 
+  /**
+   * If the timeout while waiting the CritRefill message expire we need to remove the invalid item from the memory
+   * @param msg
+   */
+  private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
+    LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; removing_item_from_memory;");
+    this.invalidItems.remove(msg.awaitedMsg.key);
+    this.savedItems.remove(msg.awaitedMsg.key);
+  }
+
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
-    LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + ";");
+    LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from_cache: " + getSender().path().name() + ";");
     if(this.invalidConfirmations.containsKey(msg.uuid)){
       this.invalidConfirmations.get(msg.uuid).add(getSender());
     }else{
@@ -379,13 +392,23 @@ public class Cache extends AbstractActor {
       LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
       savedItems.put(key, msg.newValue);
     }
-
+    if(this.invalidItems.contains(key)){
+      this.invalidItems.remove(key);
+    }
     if(this.type == CacheType.L1){
       if(Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; forward_to_children; MSG_id: " + msg.uuid + ";");
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+      this.invalidConfirmations.remove(msg.uuid); //removing the uuid of the message from the list of the invalidConfirmation
       multicast(msg);
     }else if(this.type == CacheType.L2){
+      if(pendingUpdates.containsKey(msg.uuid)){
+        pendingUpdates.get(msg.uuid).cancel();
+        pendingUpdates.remove(msg.uuid);
+        if(Config.VERBOSE_LOG)
+          LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      }
       if(Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       if (pendingReq.containsKey(msg.uuid)) {
@@ -442,7 +465,7 @@ public class Cache extends AbstractActor {
         sendMessage(errMsg, ((WriteReqMsg) msg.awaitedMsg).originator);
       }
     }else{
-      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key + ";");
+      LOGGER.debug("Cache " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
     }
   }
 
@@ -626,6 +649,7 @@ public class Cache extends AbstractActor {
             .match(RefreshItemReqMsg.class, this::onRefreshItemReqMsg)
             .match(RefreshItemRespMsg.class, this::onRefreshItemRespMsg)
             .match(StartRefreshMsg.class, this::onStartRefreshMsg)
+            .match(TimeoutUpdateCWMsg.class, this::onTimeoutUpdateCWMsg)
             .build();
   }
 
