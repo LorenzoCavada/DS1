@@ -6,7 +6,6 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Cancellable;
 import akka.actor.Props;
-import EasyCache.Messages.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.concurrent.duration.Duration;
@@ -193,6 +192,7 @@ public class DB extends AbstractActor {
       this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
       this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
       LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + ";");
+      //TODO mandare la risposta nel caso di abort della critical write
       //CritWriteError resp = new CritWriteError(associatedReq.key, associatedReq.originator, associatedReq.uuid)
       //multicast(resp)
     }
@@ -281,14 +281,14 @@ public class DB extends AbstractActor {
   @Override
   public Receive createReceive() {
     return receiveBuilder()
-      .match(ReadReqMsg.class,    this::onReadReqMsg)
       .match(AddChildMsg.class, this::onAddChildMsg)
-      .match(WriteReqMsg.class,    this::onWriteReqMsg)
       .match(SetChildrenMsg.class,    this::onSetChildrenMsg)
       .match(InternalStateMsg.class,   this::onInternalStateMsg)
       .match(RefreshItemReqMsg.class,   this::onRefreshItemReqMsg)
       .match(CritReadReqMsg.class,   this::onCritReadReqMsg)
       .match(CritWriteReqMsg.class,   this::onCritWriteReqMsg)
+      .match(ReadReqMsg.class,    this::onReadReqMsg)
+      .match(WriteReqMsg.class,    this::onWriteReqMsg)
       .match(InvalidationItemConfirmMsg.class,   this::onInvalidationItemConfirmMsg)
       .build();
   }

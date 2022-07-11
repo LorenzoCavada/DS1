@@ -27,7 +27,7 @@ public class Client extends AbstractActor {
 
   private final Map<UUID, Cancellable> pendingReq; // list of all the pending request which are still waiting for a response
 
-  private Queue<ReqMessage> waitingReqs;
+  private Queue<IdMessage> waitingReqs;
 
 
   private static final Logger LOGGER = LogManager.getLogger(Client.class);
@@ -141,7 +141,7 @@ public class Client extends AbstractActor {
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
                     getSelf(),                                          // destination actor reference
-                    new TimeoutMsg(msg),                                  // the message to send
+                    new TimeoutReqMsg(msg),                                  // the message to send
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             ));
@@ -161,7 +161,7 @@ public class Client extends AbstractActor {
     pendingReq.remove(msg.uuid);
     LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
     if (!this.waitingReqs.isEmpty()){
-      ReqMessage nextMsg=this.waitingReqs.remove();
+      IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
     }
   }
@@ -201,7 +201,7 @@ public class Client extends AbstractActor {
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
                     getSelf(),                                          // destination actor reference
-                    new TimeoutMsg(msg),                                  // the message to send
+                    new TimeoutReqMsg(msg),                                  // the message to send
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             ));
@@ -221,7 +221,7 @@ public class Client extends AbstractActor {
     pendingReq.remove(msg.uuid);
     LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
     if (!this.waitingReqs.isEmpty()){
-      ReqMessage nextMsg=this.waitingReqs.remove();
+      IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
     }
   }
@@ -260,7 +260,7 @@ public class Client extends AbstractActor {
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
                     getSelf(),                                          // destination actor reference
-                    new TimeoutMsg(msg),                                  // the message to send
+                    new TimeoutReqMsg(msg),                                  // the message to send
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             ));
@@ -279,7 +279,7 @@ public class Client extends AbstractActor {
     pendingReq.remove(msg.uuid);
     LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
     if (!this.waitingReqs.isEmpty()){
-      ReqMessage nextMsg=this.waitingReqs.remove();
+      IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
     }
   }
@@ -318,7 +318,7 @@ public class Client extends AbstractActor {
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
                     getSelf(),                                          // destination actor reference
-                    new TimeoutMsg(msg),                                  // the message to send
+                    new TimeoutReqMsg(msg),                                  // the message to send
                     getContext().system().dispatcher(),                 // system dispatcher
                     getSelf()                                           // source of the message (myself)
             ));
@@ -337,7 +337,7 @@ public class Client extends AbstractActor {
     pendingReq.remove(msg.uuid);
     LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
     if (!this.waitingReqs.isEmpty()){
-      ReqMessage nextMsg=this.waitingReqs.remove();
+      IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
     }
   }
@@ -347,15 +347,15 @@ public class Client extends AbstractActor {
    * The message passed need to be casted in the right message in order to be sent.
    * @param msg is a ReqMessage which can be a DoReadMsg or a DoWriteMsg. This is why a cast is needed.
    */
-  private void doNext(ReqMessage msg){
-    if (msg instanceof DoReadMsg){
-      doReadReq((DoReadMsg) msg);
-    }else if (msg instanceof DoWriteMsg){
-      doWriteReq((DoWriteMsg) msg);
-    }else if(msg instanceof DoCritReadMsg){
+  private void doNext(IdMessage msg){
+    if(msg instanceof DoCritReadMsg){
       doCritRead((DoCritReadMsg) msg);
     }else if(msg instanceof DoCritWriteMsg){
       doCritWriteReq((DoCritWriteMsg) msg);
+    }else if(msg instanceof DoReadMsg) {
+      doReadReq((DoReadMsg) msg);
+    }else if (msg instanceof DoWriteMsg){
+    doWriteReq((DoWriteMsg) msg);
     }
   }
 
@@ -369,7 +369,11 @@ public class Client extends AbstractActor {
   private void onReqErrorMsg(ReqErrorMsg msg) {
     pendingReq.get(msg.awaitedMsg.uuid).cancel();
     pendingReq.remove(msg.awaitedMsg.uuid);
-    if(msg.awaitedMsg instanceof ReadReqMsg){
+    if(msg.awaitedMsg instanceof CritReadReqMsg){
+      LOGGER.error("Client " + this.id + "; error_in_crit_read_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key);
+    }else if(msg.awaitedMsg instanceof CritWriteReqMsg){
+      LOGGER.error("Client " + this.id + "; error_in_crit_write_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
+    }else if(msg.awaitedMsg instanceof ReadReqMsg){
       LOGGER.error("Client " + this.id + "; error_in_read_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key);
     }else if(msg.awaitedMsg instanceof WriteReqMsg){
       LOGGER.error("Client " + this.id + "; error_in_write_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
@@ -390,9 +394,9 @@ public class Client extends AbstractActor {
    * After choosing a new parent L2 cache, it will send a new message to the new parent to ask to be added as a child.
    * @param msg is the TimeoutMsg message which contains the request that has gone in timeout.
    */
-  private void onTimeoutMsg(TimeoutMsg msg) {
+  private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
-      LOGGER.debug("Client " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key);
+      LOGGER.warn("Client " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key);
       int newParentIdx= rnd.nextInt(availableL2.size());
       while(availableL2.get(newParentIdx).equals(parent)){
         newParentIdx= rnd.nextInt(availableL2.size());
@@ -402,9 +406,8 @@ public class Client extends AbstractActor {
       AddChildMsg addMeMsg=new AddChildMsg(getSelf());
       sendMessage(addMeMsg);
       pendingReq.remove(msg.awaitedMsg.uuid);
-      doNext(msg.awaitedMsg);
     }else{
-      LOGGER.debug("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
+      LOGGER.warn("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
     }
   }
 
@@ -422,7 +425,7 @@ public class Client extends AbstractActor {
     }else{
       response=false;
     }
-    sendMessage(new IsStillParentRespMsg(response), getSender());
+    sendMessage(new IsStillParentRespMsg(response, msg.uuid), getSender());
   }
 
   /* -- END OF crash handling message methods ----------------------------------------------------- */
@@ -450,18 +453,18 @@ public class Client extends AbstractActor {
     return receiveBuilder()
       .match(SetParentMsg.class, this::onSetParentMsg)
       .match(SetAvailableL2Msg.class, this::onSetAvailL2Msg)
+      .match(DoCritReadMsg.class, this::onDoCritReadMsg)
+      .match(DoCritWriteMsg.class, this::onDoCritWriteMsg)
+      .match(CritReadRespMsg.class, this::onCritReadRespMsg)
+      .match(CritWriteConfirmMsg.class, this::onCritWriteConfirmMsg)
       .match(ReadRespMsg.class, this::onReadRespMsg)
       .match(WriteConfirmMsg.class, this::onWriteConfirmMsg)
       .match(DoReadMsg.class, this::onDoReadMsg)
       .match(DoWriteMsg.class, this::onDoWriteMsg)
       .match(IsStillParentReqMsg.class, this::onIsStillParentReqMsg)
-      .match(TimeoutMsg.class, this::onTimeoutMsg)
+      .match(TimeoutReqMsg.class, this::onTimeoutReqMsg)
       .match(InternalStateMsg.class, this::onInternalStateMsg)
       .match(ReqErrorMsg.class, this::onReqErrorMsg)
-      .match(DoCritReadMsg.class, this::onDoCritReadMsg)
-      .match(DoCritWriteMsg.class, this::onDoCritWriteMsg)
-      .match(CritReadRespMsg.class, this::onCritReadRespMsg)
-      .match(CritWriteConfirmMsg.class, this::onCritWriteConfirmMsg)
       .build();
   }
 }

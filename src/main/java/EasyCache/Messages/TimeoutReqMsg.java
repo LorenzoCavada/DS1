@@ -1,8 +1,8 @@
 package EasyCache.Messages;
 
-public class ReqErrorMsg extends Message{
+public class TimeoutReqMsg extends Message{
     public IdMessage awaitedMsg;
-    public ReqErrorMsg(IdMessage awaited){
+    public TimeoutReqMsg(IdMessage awaited){
         this.awaitedMsg=awaited;
     }
 }

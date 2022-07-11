@@ -9,11 +9,9 @@ import java.util.Stack;
 // This message will be originated by a cache after a crash and needs to check if the value saved in himself needs to be updated
 // The L2 cache will push its actorRef into the stack and then send the message to the L1 cache.
 // The L1 cache will push its actorRef into the stack and then send the message to the DB.
-public class RefreshItemReqMsg extends ReqMessage{
-    public Stack<ActorRef> responsePath;
+public class RefreshItemReqMsg extends ReadReqMsg {
 
     public RefreshItemReqMsg(int key) {
         super(key);
-        this.responsePath=new Stack<>();
     }
 }
