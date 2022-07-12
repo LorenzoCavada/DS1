@@ -108,21 +108,23 @@ public class ProjectRunner {
     // message for checking the internal state of the caches
     InternalStateMsg internalState = new InternalStateMsg();
 
+    // let's make cache101 crash
+    LOGGER.info("Make Cache101 crash");
+    l1List.get(1).tell(new CrashMsg(), ActorRef.noSender());
+
+    inputContinue();
+
     // client 300 critical write for item 1
     LOGGER.info("Client300 critical write for item 1");
     clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
 
-    inputContinue(3000);
+    inputContinue();
 
     // client 300 critical asks for item 1
     LOGGER.info("Client304 critical read for item 1");
     clientList.get(4).tell(new DoCritReadMsg(1), ActorRef.noSender());
 
-    inputContinue();
 
-    // let's make cache100 crash
-    LOGGER.info("Make Cache100 crash");
-    l1List.get(0).tell(new CrashMsg(), ActorRef.noSender());
 
     //inputContinue();
 

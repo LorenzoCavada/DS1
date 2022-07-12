@@ -18,9 +18,9 @@ public class Config implements Serializable {
 
     final public static int TIMEOUT_CACHE = 500; //cache goes in timeout after 500 ms
 
-    final public static int TIMEOUT_CACHE_INVALIDATION = 2000; //
+    final public static int TIMEOUT_CACHE_INVALIDATION = 400; //
 
-    final public static int TIMEOUT_DB_INVALIDATION = 2000; //
+    final public static int TIMEOUT_DB_INVALIDATION = 300; //
 
     final public static int TIMEOUT_CLIENT = 1000; //client goes in timeout after 1000 ms
 

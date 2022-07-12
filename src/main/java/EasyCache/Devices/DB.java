@@ -177,7 +177,7 @@ public class DB extends AbstractActor {
   }
 
   private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
-    LOGGER.debug("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
+    LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
     //check for akka bugs
     if(this.receivedInvalidAck.get(msg.awaitedMsg.uuid).size()==this.children.size()){
       this.invalidAckTimeouts.get(msg.awaitedMsg.uuid).cancel();
@@ -192,7 +192,7 @@ public class DB extends AbstractActor {
     }else{
       this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
       this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
-      LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + ";");
+      LOGGER.error("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + ";");
       //CritWriteError resp = new CritWriteError(associatedReq.key, associatedReq.originator, associatedReq.uuid)
       //multicast(resp)
     }
@@ -290,6 +290,7 @@ public class DB extends AbstractActor {
       .match(CritReadReqMsg.class,   this::onCritReadReqMsg)
       .match(CritWriteReqMsg.class,   this::onCritWriteReqMsg)
       .match(InvalidationItemConfirmMsg.class,   this::onInvalidationItemConfirmMsg)
+      .match(TimeoutInvalidAckMsg.class,   this::onTimeoutInvalidAckMsg)
       .build();
   }
 }
