@@ -231,7 +231,7 @@ public class Client extends AbstractActor {
    * It is used to trigger the write process by providing the key of the item to update and the newValue.
    * Is used for debug purposes.
    * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the read request.
+   * If there are not pending requests, it will trigger the doWriteReq method which will perform the actual write request.
    * @param msg is the DoReadMsg message which contains the key of the item to update and the newValue.
    */
   private void onDoWriteMsg(DoWriteMsg msg){
@@ -285,12 +285,12 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a DoWriteMsg is received.
-   * It is used to trigger the write process by providing the key of the item to update and the newValue.
+   * This method is called when a DoCritWriteMsg is received.
+   * It is used to trigger the critical write process by providing the key of the item to update and the newValue.
    * Is used for debug purposes.
    * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the read request.
-   * @param msg is the DoReadMsg message which contains the key of the item to update and the newValue.
+   * If there are not pending requests, it will trigger the critical write method which will perform the actual request.
+   * @param msg is the DoCritWriteMsg message which contains the key of the item to update and the newValue.
    */
   private void onDoCritWriteMsg(DoCritWriteMsg msg){
     if(this.pendingReq.size()>0){
@@ -301,14 +301,14 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method will perform the actual write operation.
-   * First the client will create a WriteReqMsg specifying himself as originator.
-   * Then it will send the WriteReqMsg to the parent node.
+   * This method will perform the actual critical write operation.
+   * First the client will create a CritWriteReqMsg specifying himself as originator.
+   * Then it will send the CritWriteReqMsg to the parent node.
    * The client will also add this request to the list of the pending one. In this way it will not send new request until this is finished.
    * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
    * This TimeoutMsg contains a copy of the request which did not receive a response in time.
    * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
-   * @param msg is the DoWriteMsg message which contains the key of the item to write and the new value to set.
+   * @param msg is the DoCritWriteMsg message which contains the key of the item to write and the new value to set.
    */
   private void doCritWriteReq(DoCritWriteMsg msg){
     CritWriteReqMsg msgToSend = new CritWriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
@@ -325,12 +325,12 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a onWriteConfirmMsg is received.
-   * It is used to print the result of a write request.
+   * This method is called when a CritWriteConfirmMsg is received.
+   * It is used to print the result of a critical write request.
    * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
    * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
    * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg is the WriteConfirmMsg message which contains the result of the write request.
+   * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
    */
   private void onCritWriteConfirmMsg(CritWriteConfirmMsg msg){
     pendingReq.get(msg.uuid).cancel();
@@ -345,6 +345,8 @@ public class Client extends AbstractActor {
   /**
    * This method is used to perform the next request in the waiting list.
    * The message passed need to be casted in the right message in order to be sent.
+   * Due to the inheritance of the messages, the order of the cast is relevant, a DoCritReadMsg is indeed also a DoReadMsg.
+   * If we switch the order of the cast a DoCritReadMsg will be seen as a DoReadMsg and the client will send a normal read request instead then a critical one.
    * @param msg is a ReqMessage which can be a DoReadMsg or a DoWriteMsg. This is why a cast is needed.
    */
   private void doNext(IdMessage msg){

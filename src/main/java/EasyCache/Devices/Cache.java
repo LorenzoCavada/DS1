@@ -238,11 +238,10 @@ public class Cache extends AbstractActor {
       LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; value: " + msg.newValue + "; MSG_id: " + msg.uuid + ";");
       savedItems.put(key, msg.newValue);
     }
-
     if(this.type == CacheType.L1){
       if(Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
-      // pendingReq.get(msg.uuid).cancel();
+      // is case is a L1 cache no timer needs to be removed because there is no timer associated to the request sent to the DB duo to the fact that the DB cannot crash
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       multicast(msg);
     }else if(this.type == CacheType.L2){
@@ -312,7 +311,7 @@ public class Cache extends AbstractActor {
 
   /**
    * This method is used to handle the CritWriteReqMsg message which represent the write request message.
-   * A cache can only forward the request to its parent till it reach the DB where the write will be applied.
+   * A cache can only forward the request to its parent till it reach the DB where the critical write will be applied.
    * A timeout is also started.
    * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
    * @param msg is the WriteReqMsg message which contains the key of the element to be written and the value to be written.
@@ -332,6 +331,18 @@ public class Cache extends AbstractActor {
     sendMessage(msg, parent);
   }
 
+    /**
+     * This method is used to handle the InvalidationItemMsg message which represent a step in the critical write process.
+     * Before perform the actual critical rite the DB needs to ensure that no cache will provide to its client the old value.
+     * To do so after receiving the critical read request the DB will send an InvalidationItemMsg to require the cache to invalidate a given item.
+     * Upon receving the InvalidationItemMsg the cache will first add the item to the list of the invalid ones. This list is checked before serving a write or read request.
+     * In this way the cache can block eventual read or write requests for an item which is undergoing a critical write.
+     * If the cache is also an L1 cache it will also send a message to the L2 cache in order to invalidate the item also in the children.
+     * Instead, if the cache is a L2 cache it will start a timer, it may happen indeed that the parent crash before forwarding the result of the critical write
+     * In this case the safest solution will be to remove the item from the memory in order to avoid the cache to serve the old value.
+     * After that a confirmation message is sent to the parent node.
+     * @param msg is the InvalidationItemMsg message which contains the key of the element to be invalidated.
+     */
   private void onInvalidationItemMsg(InvalidationItemMsg msg){
     LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + ";");
     this.invalidItems.add(msg.key);
@@ -352,7 +363,8 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * If the timeout while waiting the CritRefill message expire we need to remove the invalid item from the memory
+   * If the timeout while waiting the CritRefill message expire we need to remove the invalid item from the memory.
+   * This can happen only on the L2 cache in the case that its L1 parent crash while waiting the results of the critical write.
    * @param msg
    */
   private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
@@ -361,6 +373,12 @@ public class Cache extends AbstractActor {
     this.savedItems.remove(msg.awaitedMsg.key);
   }
 
+  /**
+   * Receiving an onInvalidationItemConfirmMsg means that a cache has correctly invalidated the item.
+   * This message will be triggered only on L1 cache which will wait the confirmations of invalidation from its children before sending its confirmation to the parent
+   * The cache will only wait children.size() - 1 confirmation because we can assume at max 1 crash at a time.
+   * @param msg
+   */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
     LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from_cache: " + getSender().path().name() + ";");
     if(this.invalidConfirmations.containsKey(msg.uuid)){
@@ -378,8 +396,9 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
+   * This method is used to handle the CritRefillMsg message. The CritRefillMsg message represent the ack of a critical write request.
    * The cache will first check if the value is stored in its memory, in that case it will update it.
+   * Then it will remove the element from the list of the invalid ones, because it means that the DB has correctly updated the item.
    * Then, if the cache is a L1 cache, it will simply forward the message to all its children.
    * If the cache is a L2 cache, it will check if the originator of the request is one of its children.
    * If yes the L2 cache will send the confirmation of the write operation to the client.
@@ -409,9 +428,9 @@ public class Cache extends AbstractActor {
         if(Config.VERBOSE_LOG)
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       }
-      if(Config.VERBOSE_LOG)
-        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
       if (pendingReq.containsKey(msg.uuid)) {
+        if(Config.VERBOSE_LOG)
+          LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
         pendingReq.get(msg.uuid).cancel();
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       }

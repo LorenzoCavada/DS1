@@ -129,7 +129,9 @@ public class DB extends AbstractActor {
 
   /**
    * This method is called when a CritWriteReqMsg is received.
-   * The DB will update the item with the new value and then will send a Refill message to all its children.
+   * The DB will first ask all its children to invalidate the item object of the critical write request.
+   * Then it will wait the confirmation of invalidations from ALL its children
+   * It will also start a timer at the end of which will check if all the confirmations have been received.
    * @param msg is the CritWriteReqMsg message which contains the key and the value to be updated.
    */
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
@@ -152,6 +154,14 @@ public class DB extends AbstractActor {
     multicast(invalidMsg);
   }
 
+    /**
+     * This method is called when a InvalidationItemConfirmMsg is received.
+     * This message means that a children of the DB has correctly invalidated the item.
+     * After each confirmation the DB will check if all of its children has completed the invalidation process.
+     * If so, the DB will update the item and will send the CritRefillMsg to all its children.
+     * This message represent the end of the critical write process.
+     * @param msg
+     */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
     LOGGER.debug("DB " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from " + getSender().path().name() + ";");
     if(this.receivedInvalidAck.containsKey(msg.uuid)){
@@ -172,9 +182,15 @@ public class DB extends AbstractActor {
       this.receivedInvalidAck.remove(msg.uuid);
       this.invalidAckTimeouts.remove(msg.uuid);
     }
-
   }
 
+    /**
+     * This method is called when a TimeoutInvalidAckMsg is received.
+     * This message means that a children of the DB has not completed the invalidation message in time.
+     * This means that the DB cannot ensure that all the cache will stop sending the old value to the client.
+     * In this case a critical write cannot be performed. So the DB will send a fail message to the originator of the critical write.
+     * @param msg
+     */
   private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
     LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
     //check for akka bugs
