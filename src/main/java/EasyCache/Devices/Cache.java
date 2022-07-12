@@ -163,7 +163,7 @@ public class Cache extends AbstractActor {
                 getContext().system().scheduler().scheduleOnce(
                         Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
                         getSelf(),                                          // destination actor reference
-                        new TimeoutMsg(msg),                                  // the message to send
+                        new TimeoutReqMsg(msg),                                  // the message to send
                         getContext().system().dispatcher(),                 // system dispatcher
                         getSelf()                                           // source of the message (myself)
                 )); //adding the uuid of the message to the list of the pending ones
@@ -212,7 +212,7 @@ public class Cache extends AbstractActor {
                 getContext().system().scheduler().scheduleOnce(
                         Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
                         getSelf(),                                          // destination actor reference
-                        new TimeoutMsg(msg),                                  // the message to send
+                        new TimeoutReqMsg(msg),                                  // the message to send
                         getContext().system().dispatcher(),                 // system dispatcher
                         getSelf()                                           // source of the message (myself)
                 ));
@@ -282,7 +282,7 @@ public class Cache extends AbstractActor {
               getContext().system().scheduler().scheduleOnce(
                       Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
                       getSelf(),                                          // destination actor reference
-                      new TimeoutMsg(msg),                                  // the message to send
+                      new TimeoutReqMsg(msg),                                  // the message to send
                       getContext().system().dispatcher(),                 // system dispatcher
                       getSelf()                                           // source of the message (myself)
               )); //adding the uuid of the message to the list of the pending ones
@@ -438,7 +438,7 @@ public class Cache extends AbstractActor {
    * Then it will remove the request to the list of the pending one and will notify, throw an ReqErrorMsg to the originator of the request that the request has failed.
    * @param msg is the TimeoutMsg message which contains a copy of the request that has failed.
    */
-  private void onTimeoutMsg(TimeoutMsg msg) {
+  private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
       LOGGER.debug("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " msg_id: " + msg.awaitedMsg.uuid);
       this.parent=this.db;
@@ -451,7 +451,7 @@ public class Cache extends AbstractActor {
       pendingReq.remove(msg.awaitedMsg.uuid);
 
       ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
-
+      //TODO ricordarsi che le instanceof van fatte partendo dalle sottoclassi, quindi prima le critical delle relative non critical
       if(msg.awaitedMsg instanceof ReadReqMsg){
         ActorRef dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
         // POSSIBLE REFACTOR TO REMOVE THE FACT THAT THE AWAITED REQUEST IS PASSED BY REFERENCE CAUSING THE RESPONSE PATH TO HAVE THE L2 CACHE ON TOP OF THE STACK
@@ -543,7 +543,7 @@ public class Cache extends AbstractActor {
     }else{
       response=false;
     }
-    sendMessage(new IsStillParentRespMsg(response), sender);
+    sendMessage(new IsStillParentRespMsg(response, msg.uuid), sender);
   }
 
   /**
@@ -631,23 +631,23 @@ public class Cache extends AbstractActor {
             .match(SetChildrenMsg.class, this::onSetChildrenMsg)
             .match(AddChildMsg.class, this::onAddChildMsg)
             .match(SetParentMsg.class, this::onSetParentMsg)
-            .match(ReadReqMsg.class, this::onReadReqMsg)
-            .match(ReadRespMsg.class, this::onReadRespMsg)
             .match(CritReadReqMsg.class, this::onCritReadReqMsg)
             .match(CritReadRespMsg.class, this::onCritReadRespMsg)
             .match(CritWriteReqMsg.class, this::onCritWriteReqMsg)
+            .match(CritRefillMsg.class, this::onCritRefillMsg)
+            .match(RefreshItemReqMsg.class, this::onRefreshItemReqMsg)
+            .match(RefreshItemRespMsg.class, this::onRefreshItemRespMsg)
+            .match(ReadReqMsg.class, this::onReadReqMsg)
+            .match(ReadRespMsg.class, this::onReadRespMsg)
             .match(InvalidationItemMsg.class, this::onInvalidationItemMsg)
             .match(InvalidationItemConfirmMsg.class, this::onInvalidationItemConfirmMsg)
             .match(WriteReqMsg.class, this::onWriteReqMsg)
             .match(RefillMsg.class, this::onRefillMsg)
-            .match(CritRefillMsg.class, this::onCritRefillMsg)
             .match(InternalStateMsg.class, this::onInternalStateMsg)
             .match(IsStillParentReqMsg.class, this::onIsStillParentReqMsg)
             .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
             .match(CrashMsg.class, this::onCrashMsg)
-            .match(TimeoutMsg.class, this::onTimeoutMsg)
-            .match(RefreshItemReqMsg.class, this::onRefreshItemReqMsg)
-            .match(RefreshItemRespMsg.class, this::onRefreshItemRespMsg)
+            .match(TimeoutReqMsg.class, this::onTimeoutReqMsg)
             .match(StartRefreshMsg.class, this::onStartRefreshMsg)
             .match(TimeoutUpdateCWMsg.class, this::onTimeoutUpdateCWMsg)
             .build();

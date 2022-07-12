@@ -25,6 +25,8 @@ Changed some methods which was directly using `.tell()` to send messages and, so
 
 Added the refresh procedure to a L2 cache that detects the crash of its L1 parent. Also check the code with Alessandro
 
-### 10/07/2022 - Lorenzo
+### 10/07/2022 - Lorenzo & Ale
 
 Finished the critical read method. Also added a verbose log mode.
+Finished critical write without crashes during it. We miss the error for an aborted critical write
+Full refactor of Messages

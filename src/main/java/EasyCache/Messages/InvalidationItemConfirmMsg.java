@@ -2,12 +2,9 @@ package EasyCache.Messages;
 
 import java.util.UUID;
 
-public class InvalidationItemConfirmMsg extends Message {
-    public int key;
-    public UUID uuid;
+public class InvalidationItemConfirmMsg extends IdMessage {
 
     public InvalidationItemConfirmMsg(int key, UUID uuid){
-        this.key=key;
-        this.uuid=uuid;
+        super(key,uuid);
     }
 }
