@@ -123,7 +123,7 @@ public class DB extends AbstractActor {
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
     CritReadRespMsg resp = new CritReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; critical_read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; critical_read_response_sent;");
+    LOGGER.debug("DB " + this.id + "; critical_read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; MSG_ID: " + msg.uuid + "; critical_read_response_sent;");
     sendMessage(resp, nextHop);
   }
 
@@ -138,7 +138,7 @@ public class DB extends AbstractActor {
     Integer key = msg.key;
     //items.put(key, msg.newValue);
     //RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; sending_invalidation");
+    LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID:" + msg.uuid + "; sending_invalidation");
 
     this.critWrites.put(msg.uuid, msg);
     InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
@@ -163,7 +163,7 @@ public class DB extends AbstractActor {
      * @param msg
      */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
-    LOGGER.debug("DB " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from " + getSender().path().name() + ";");
+    LOGGER.debug("DB " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from " + getSender().path().name() + "; MSG_ID: " + msg.uuid + ";");
     if(this.receivedInvalidAck.containsKey(msg.uuid)){
       this.receivedInvalidAck.get(msg.uuid).add(getSender());
     }else{
@@ -175,7 +175,7 @@ public class DB extends AbstractActor {
       this.invalidAckTimeouts.get(msg.uuid).cancel();
       CritWriteReqMsg associatedReq=this.critWrites.get(msg.uuid);
       items.put(associatedReq.key, associatedReq.newValue);
-      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + ";");
+      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + "; MSG_ID:" + msg.uuid + "; sending_refill");
       CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
       multicast(resp);
       this.receivedInvalidAck.get(msg.uuid).clear();
@@ -223,7 +223,7 @@ public class DB extends AbstractActor {
     Integer key = msg.key;
     items.put(key, msg.newValue);
     RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; write_performed");
+    LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID:" + msg.uuid + "; write_performed");
     multicast(resp);
   }
 

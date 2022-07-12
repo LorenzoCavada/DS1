@@ -344,7 +344,7 @@ public class Cache extends AbstractActor {
      * @param msg is the InvalidationItemMsg message which contains the key of the element to be invalidated.
      */
   private void onInvalidationItemMsg(InvalidationItemMsg msg){
-    LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + ";");
+    LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; invalidation_sent;");
     this.invalidItems.add(msg.key);
     if(this.type.equals(CacheType.L1)){
       multicast(msg);
