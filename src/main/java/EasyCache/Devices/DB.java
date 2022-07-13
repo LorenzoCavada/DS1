@@ -136,22 +136,38 @@ public class DB extends AbstractActor {
    */
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
     Integer key = msg.key;
-    //items.put(key, msg.newValue);
-    //RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID:" + msg.uuid + "; sending_invalidation");
 
-    this.critWrites.put(msg.uuid, msg);
-    InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
 
-    invalidAckTimeouts.put(msg.uuid,
-            getContext().system().scheduler().scheduleOnce(
-                    Duration.create(Config.TIMEOUT_DB_INVALIDATION, TimeUnit.MILLISECONDS),        // when to send the message
-                    getSelf(),                                          // destination actor reference
-                    new TimeoutInvalidAckMsg(invalidMsg),                                  // the message to send
-                    getContext().system().dispatcher(),                 // system dispatcher
-                    getSelf()                                           // source of the message (myself)
-            )); //adding the uuid of the message to the list of the pending ones
-    multicast(invalidMsg);
+
+    if(!isPerformingCritWriteOnItem(msg.key)){
+      this.critWrites.put(msg.uuid, msg);
+      InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
+      invalidAckTimeouts.put(msg.uuid,
+              getContext().system().scheduler().scheduleOnce(
+                      Duration.create(Config.TIMEOUT_DB_INVALIDATION, TimeUnit.MILLISECONDS),        // when to send the message
+                      getSelf(),                                          // destination actor reference
+                      new TimeoutInvalidAckMsg(invalidMsg),                                  // the message to send
+                      getContext().system().dispatcher(),                 // system dispatcher
+                      getSelf()                                           // source of the message (myself)
+              )); //adding the uuid of the message to the list of the pending ones
+      LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; sending_invalidation");
+      multicast(invalidMsg);
+    }else{
+      LOGGER.error("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; already_in_progress");
+      CritWriteErrorMsg resp = new CritWriteErrorMsg(msg.key, msg.originator, msg.uuid);
+      multicast(resp);
+    }
+  }
+
+  private boolean isPerformingCritWriteOnItem(int key){
+    boolean result = false;
+    for(CritWriteReqMsg m : this.critWrites.values()){
+      if(m.key==key){
+        result=true;
+        break;
+      }
+    }
+    return result;
   }
 
     /**
@@ -175,9 +191,10 @@ public class DB extends AbstractActor {
       this.invalidAckTimeouts.get(msg.uuid).cancel();
       CritWriteReqMsg associatedReq=this.critWrites.get(msg.uuid);
       items.put(associatedReq.key, associatedReq.newValue);
-      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + "; MSG_ID:" + msg.uuid + "; sending_refill");
+      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + "; MSG_ID: " + msg.uuid + "; sending_refill");
       CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
       multicast(resp);
+      this.critWrites.remove(msg.uuid);
       this.receivedInvalidAck.get(msg.uuid).clear();
       this.receivedInvalidAck.remove(msg.uuid);
       this.invalidAckTimeouts.remove(msg.uuid);
@@ -187,30 +204,31 @@ public class DB extends AbstractActor {
     /**
      * This method is called when a TimeoutInvalidAckMsg is received.
      * This message means that a children of the DB has not completed the invalidation message in time.
-     * This means that the DB cannot ensure that all the cache will stop sending the old value to the client.
+     * This means that the DB cannot ensure that all the cache will stop sending the old value to clients.
      * In this case a critical write cannot be performed. So the DB will send a fail message to the originator of the critical write.
      * @param msg
      */
   private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
     LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
+    CritWriteReqMsg associatedReq=this.critWrites.get(msg.awaitedMsg.uuid);
     //check for akka bugs
     if(this.receivedInvalidAck.get(msg.awaitedMsg.uuid).size()==this.children.size()){
       this.invalidAckTimeouts.get(msg.awaitedMsg.uuid).cancel();
-      CritWriteReqMsg associatedReq=this.critWrites.get(msg.awaitedMsg.uuid);
       items.put(associatedReq.key, associatedReq.newValue);
       CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
-      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + ";");
+      LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + "; MSG_ID: " + associatedReq.uuid + ";");
       multicast(resp);
+      this.critWrites.remove(msg.awaitedMsg.uuid);
       this.receivedInvalidAck.get(msg.awaitedMsg.uuid).clear();
       this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
       this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
     }else{
+      LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + "; MSG_ID: " + associatedReq.uuid + "; sending_error;");
+      CritWriteErrorMsg resp = new CritWriteErrorMsg(associatedReq.key, associatedReq.originator, associatedReq.uuid);
+      multicast(resp);
+      this.critWrites.remove(msg.awaitedMsg.uuid);
       this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
       this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
-      LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + ";");
-      //TODO mandare la risposta nel caso di abort della critical write
-      //CritWriteError resp = new CritWriteError(associatedReq.key, associatedReq.originator, associatedReq.uuid)
-      //multicast(resp)
     }
   }
 
@@ -223,7 +241,7 @@ public class DB extends AbstractActor {
     Integer key = msg.key;
     items.put(key, msg.newValue);
     RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID:" + msg.uuid + "; write_performed");
+    LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; write_performed");
     multicast(resp);
   }
 

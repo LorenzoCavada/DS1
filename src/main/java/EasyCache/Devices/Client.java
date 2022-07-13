@@ -335,7 +335,25 @@ public class Client extends AbstractActor {
   private void onCritWriteConfirmMsg(CritWriteConfirmMsg msg){
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
+    LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;"+ " msg_id: " + msg.uuid);
+    if (!this.waitingReqs.isEmpty()){
+      IdMessage nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
+  }
+
+  /**
+   * This method is called when a CritWriteConfirmMsg is received.
+   * It is used to print the result of a critical write request.
+   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
+   * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
+   * This is done to ensure that a client will send a request only when the previous one is finished.
+   * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
+   */
+  private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
+    pendingReq.get(msg.uuid).cancel();
+    pendingReq.remove(msg.uuid);
+    LOGGER.error("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; crit_write_error; timeout_canceled;");
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -467,6 +485,7 @@ public class Client extends AbstractActor {
       .match(TimeoutReqMsg.class, this::onTimeoutReqMsg)
       .match(InternalStateMsg.class, this::onInternalStateMsg)
       .match(ReqErrorMsg.class, this::onReqErrorMsg)
+      .match(CritWriteErrorMsg.class, this::onCritWriteErrorMsg)
       .build();
   }
 }

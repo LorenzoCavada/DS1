@@ -109,6 +109,11 @@ public class ProjectRunner {
     InternalStateMsg internalState = new InternalStateMsg();
 
     // client 300 critical asks for item 1
+    LOGGER.info("Client300 critical write for item 1 and value 5");
+    clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
+    LOGGER.info("Client304 critical write for item 1 and value 3");
+    clientList.get(7).tell(new DoReadMsg(1), ActorRef.noSender());
+    /*// client 300 critical asks for item 1
     LOGGER.info("Client300 critical read for item 1");
     clientList.get(0).tell(new DoCritReadMsg(1), ActorRef.noSender());
   // client 300 critical asks for item 2
@@ -145,7 +150,7 @@ public class ProjectRunner {
     // client 300 critical asks for item 1
     LOGGER.info("Client304 critical read for item 1");
     clientList.get(4).tell(new DoCritReadMsg(1), ActorRef.noSender());
-
+    */
     inputContinue();
     system.terminate();
   }
