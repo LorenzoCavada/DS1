@@ -395,7 +395,8 @@ public class Cache extends AbstractActor {
 
     //I don't care if one confirmation does not arrive, because one L2 cache can crash but it is good anyway.
     // When recovers it will update
-    if(this.invalidConfirmations.get(msg.uuid).size()>this.children.size()-1){
+    // just == children.size -1 confirmations are enough, not >= children.size -1 to avoid resending
+    if(this.invalidConfirmations.get(msg.uuid).size()==(this.children.size()-1)){
       LOGGER.debug("Cache " + this.id + "; all_invalidation_confirm_received_for: : " + msg.key + "; MSG_id: " + msg.uuid + "; send_to: " + this.parent.path().name() + ";");
       sendMessage(msg, this.parent);
     }
