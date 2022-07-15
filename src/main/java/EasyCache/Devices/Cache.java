@@ -1,6 +1,7 @@
 package EasyCache.Devices;
 
 import EasyCache.Config;
+import EasyCache.CrashType;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
@@ -35,6 +36,10 @@ public class Cache extends AbstractActor {
 
   private Map<UUID, Set<ActorRef>> invalidConfirmations;
 
+  private CrashType nextCrash; //next crash in the node
+
+  private int afterNMessageSent; //in case of crash during multicast, this parameter will tell after how many multicast a L1 cache crashes
+
   private static final Logger LOGGER = LogManager.getLogger(Cache.class);
   /* -- Actor constructor --------------------------------------------------- */
 
@@ -53,6 +58,8 @@ public class Cache extends AbstractActor {
     this.invalidItems=new HashSet<>();
     this.pendingUpdates=new HashMap<>();
     this.invalidConfirmations=new HashMap<>();
+    this.nextCrash=CrashType.NONE;
+    this.afterNMessageSent=Integer.MAX_VALUE;
   }
 
   static public Props props(int id, CacheType type, ActorRef db) {
@@ -80,8 +87,15 @@ public class Cache extends AbstractActor {
    * @param m represents the message to be sent to the children.
    */
   private void multicast(Message m) {
+    int i = 0;
     for (ActorRef p: children) {
+      //TODO aggiungere la logica di fermare il multicast dopo afterSentNMessage se il crash type è durante un multicast
+
+      //TODO in altri metodi -> aggiungere se il nodo deve crashare dopo che è arrivato un certo tipo messaggio facendo un check su
+      //TODO if(nextCrash.name().equals(CrashType.<tipoCrash>.name()))
+
       sendMessage(m, p);
+      i++;
     }
   }
 
@@ -601,6 +615,8 @@ public class Cache extends AbstractActor {
     for(ActorRef child: children){
       sendMessage(new IsStillParentReqMsg(), child);
     }
+    this.nextCrash = CrashType.NONE;
+    this.afterNMessageSent = Integer.MAX_VALUE;
     getContext().become(createReceive());
   }
 
@@ -659,6 +675,7 @@ public class Cache extends AbstractActor {
    */
   private void onCrashMsg(CrashMsg msg){
     LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+    this.nextCrash=msg.type;
     pendingReq.values().forEach(Cancellable::cancel);
     pendingUpdates.values().forEach(Cancellable::cancel);
     pendingUpdates.clear();
@@ -666,7 +683,15 @@ public class Cache extends AbstractActor {
     invalidConfirmations.clear();
     pendingReq.clear();
     savedItems.clear();
+
+    //TODO quando si mette il controllo sui crash nei vari tipi di messaggio, va tolto il become crashed. forse va
+    //TODO spostato in un altro metodo ausiliario tutta la logica del clear delle strutture dati?
     getContext().become(crashed());
+  }
+
+  private void onCrashDuringMulticastMsg(CrashDuringMulticastMsg msg){
+    this.afterNMessageSent=msg.afterNMessage;
+    onCrashMsg(msg);
   }
 
   /* -- END OF crash handling message methods --------------------------------------------------------- */
@@ -721,6 +746,7 @@ public class Cache extends AbstractActor {
             .match(InternalStateMsg.class, this::onInternalStateMsg)
             .match(IsStillParentReqMsg.class, this::onIsStillParentReqMsg)
             .match(IsStillParentRespMsg.class, this::onIsStillParentRespMsg)
+            .match(CrashDuringMulticastMsg.class, this::onCrashDuringMulticastMsg)
             .match(CrashMsg.class, this::onCrashMsg)
             .match(TimeoutReqMsg.class, this::onTimeoutReqMsg)
             .match(StartRefreshMsg.class, this::onStartRefreshMsg)
