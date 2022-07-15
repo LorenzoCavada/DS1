@@ -4,5 +4,6 @@ package EasyCache;
 public enum CrashType {
     //TODO aggiungere altri tipi di crash
     AFTER_L1_FORWARD,
-    AFTER_L2_FORWARD
+    AFTER_L2_FORWARD,
+    NONE
 }
