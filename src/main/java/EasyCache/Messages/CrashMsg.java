@@ -1,7 +1,11 @@
 package EasyCache.Messages;
 
-public class CrashMsg extends Message {
+import EasyCache.CrashType;
 
-    public CrashMsg(){}
+public class CrashMsg extends Message {
+    public CrashType type; //type of crash
+    public CrashMsg(CrashType type){
+        this.type=type;
+    }
 }
 
