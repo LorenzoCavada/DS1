@@ -109,10 +109,10 @@ public class ProjectRunner {
     InternalStateMsg internalState = new InternalStateMsg();
 
     // cache 101 crash
-    LOGGER.info("cache 202 crash ");
-    l2List.get(2).tell(new CrashMsg(), ActorRef.noSender());
-    LOGGER.info("cache 203 crash ");
-    l2List.get(3).tell(new CrashMsg(), ActorRef.noSender());
+    //LOGGER.info("cache 202 crash ");
+    //l2List.get(2).tell(new CrashMsg(), ActorRef.noSender());
+    //LOGGER.info("cache 203 crash ");
+    //l2List.get(3).tell(new CrashMsg(), ActorRef.noSender());
 
     inputContinue();
 
