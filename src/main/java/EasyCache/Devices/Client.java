@@ -55,13 +55,13 @@ public class Client extends AbstractActor {
    * The client can only communicate with its parent and the sleep function is used to simulate the network delay.
    * @param m is the message to be sent to the parent
    */
-  private void sendMessage(Serializable m){
+  private void sendMessage(Message m){
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     parent.tell(m, getSelf());
   }
 
-  private void sendMessage(Serializable m, ActorRef dest){
+  private void sendMessage(Message m, ActorRef dest){
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());

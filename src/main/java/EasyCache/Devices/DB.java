@@ -51,7 +51,7 @@ public class DB extends AbstractActor {
    * @param m is the message to send
    * @param dest is the actorRef of the destination actor
    */
-  private void sendMessage(Serializable m, ActorRef dest){
+  private void sendMessage(Message m, ActorRef dest){
     try { Thread.sleep(rnd.nextInt(10)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());
@@ -62,7 +62,7 @@ public class DB extends AbstractActor {
    * The multicast will use Thread.sleep in order to simulate a network delay.
    * @param m represents the message to be sent to the children.
    */
-  private void multicast(Serializable m) {
+  private void multicast(Message m) {
     for (ActorRef p: children) {
       sendMessage(m, p);
     }
