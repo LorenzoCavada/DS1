@@ -9,6 +9,7 @@ import akka.actor.Cancellable;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Logger;
@@ -36,7 +37,7 @@ public class Client extends AbstractActor {
 
   public Client(int id) {
     this.id = id;
-    this.availableL2=new ArrayList<>();
+    this.availableL2=new CopyOnWriteArrayList<>();
     this.pendingReq=new HashMap<>();
     this.waitingReqs=new LinkedList<>();
   }
