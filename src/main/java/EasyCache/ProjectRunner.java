@@ -8,12 +8,13 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 import EasyCache.Config;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import scala.Int;
 
 public class ProjectRunner {
 
@@ -38,21 +39,21 @@ public class ProjectRunner {
     final ActorRef db = system.actorOf(DB.props(items), "db");
 
     // create the L1 caches
-    List<ActorRef> l1List = new ArrayList<ActorRef>();
+    ArrayList<ActorRef> l1List = new ArrayList<ActorRef>();
     for (int i = 0; i < Config.N_L1; i++) {
       int id = i + 100;
       l1List.add(system.actorOf(Cache.props(id, CacheType.L1, db), "L1_" + id));
     }
 
     // create the L2 caches
-    List<ActorRef> l2List = new ArrayList<ActorRef>();
+    ArrayList<ActorRef> l2List = new ArrayList<ActorRef>();
     for (int i = 0; i < Config.N_L2; i++) {
       int id = i + 200;
       l2List.add(system.actorOf(Cache.props(id, CacheType.L2, db), "L2_" + id));
     }
 
     // create the clients
-    List<ActorRef> clientList = new ArrayList<ActorRef>();
+    ArrayList<ActorRef> clientList = new ArrayList<ActorRef>();
     // create the availableL2Msg for the client
     SetAvailableL2Msg availableL2Msg = new SetAvailableL2Msg(l2List);
     for (int i = 0; i < Config.N_CLIENT; i++) {
@@ -66,16 +67,36 @@ public class ProjectRunner {
     db.tell(joinDB, ActorRef.noSender());
 
     //partition the list of all L2 and all Clients in sets of (Config.N_CLIENT/Config.N_L2) and (Config.N_L2/Config.N_L1) elements
-    int partitionClientSize = (int) Math.ceil( (double)Config.N_CLIENT / (double) Config.N_L2);
-    int partitionL2Size = (int) Math.ceil( (double)Config.N_L2 / (double)Config.N_L1);
-    List<List<ActorRef>> partitionsClient = new ArrayList<>();
-    List<List<ActorRef>> partitionsL2 = new ArrayList<>();
+    int partitionClientSize = (int) Math.floor( (double)Config.N_CLIENT / (double) Config.N_L2);
+    int partitionL2Size = (int) Math.floor( (double)Config.N_L2 / (double)Config.N_L1);
+    List<CopyOnWriteArrayList<ActorRef>> partitionsClient = new ArrayList<>();
+    List<CopyOnWriteArrayList<ActorRef>> partitionsL2 = new ArrayList<>();
 
-    for(int i = 0; i < Config.N_CLIENT; i+= partitionClientSize){
-      partitionsClient.add(clientList.subList(i, Math.min(i + partitionClientSize, Config.N_CLIENT)));
+
+    for(int i = 0; i < Config.N_CLIENT;i+=partitionClientSize){
+      CopyOnWriteArrayList<ActorRef> theList=new CopyOnWriteArrayList<>();
+      theList.addAll(clientList.subList(i, Math.min(i+partitionClientSize, Config.N_CLIENT)));
+      partitionsClient.add(theList);
     }
+
+    ListIterator<CopyOnWriteArrayList<ActorRef>> iter1C=partitionsClient.listIterator(Config.N_L2);
+    ListIterator<CopyOnWriteArrayList<ActorRef>> iter2C=partitionsClient.listIterator();
+
+    while(iter1C.hasNext()){
+      iter2C.next().addAll(iter1C.next());
+    }
+
     for(int i = 0; i < Config.N_L2; i+= partitionL2Size){
-      partitionsL2.add(l2List.subList(i, Math.min(i + partitionL2Size, Config.N_L2)));
+      CopyOnWriteArrayList<ActorRef> theList=new CopyOnWriteArrayList<>();
+      theList.addAll(l2List.subList(i, Math.min(i + partitionL2Size, Config.N_L2)));
+      partitionsL2.add(theList);
+    }
+
+    ListIterator<CopyOnWriteArrayList<ActorRef>> iter1_L2=partitionsL2.listIterator(Config.N_L1);
+    ListIterator<CopyOnWriteArrayList<ActorRef>> iter2_L2=partitionsL2.listIterator();
+
+    while(iter1_L2.hasNext()){
+      iter2_L2.next().addAll(iter1_L2.next());
     }
 
     //we set parent and children of L1 caches
@@ -109,7 +130,7 @@ public class ProjectRunner {
     InternalStateMsg internalState = new InternalStateMsg();
 
     //fill some caches with the item 1
-    LOGGER.info("Client 300 performs a read request");
+    /*LOGGER.info("Client 300 performs a read request");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
     //fill some caches with the item 1
     LOGGER.info("Client 304 performs a read request");
@@ -123,7 +144,7 @@ public class ProjectRunner {
     LOGGER.info("Client 300 performs a write request");
     clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
 
-    inputContinue(2000);
+    inputContinue(2000);*/
     LOGGER.info("PRINT INTERNAL STATE");
     l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
     l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));
