@@ -784,6 +784,7 @@ public class Cache extends AbstractActor {
   private void onCrashDuringMulticastMsg(CrashDuringMulticastMsg msg){
     this.nextCrash=msg.type;
     this.afterNMessageSent=msg.afterNMessage;
+    this.recoveryAfter = msg.delay;
   }
 
   /* -- END OF crash handling message methods --------------------------------------------------------- */
