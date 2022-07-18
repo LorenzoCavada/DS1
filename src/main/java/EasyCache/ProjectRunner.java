@@ -108,60 +108,25 @@ public class ProjectRunner {
     // message for checking the internal state of the caches
     InternalStateMsg internalState = new InternalStateMsg();
 
-    // cache 101 crash
-    //LOGGER.info("cache 202 crash ");
-    //l2List.get(2).tell(new CrashMsg(), ActorRef.noSender());
-    //LOGGER.info("cache 203 crash ");
-    //l2List.get(3).tell(new CrashMsg(), ActorRef.noSender());
+    //fill some caches with the item 1
+    LOGGER.info("Client 300 performs a read request");
+    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+    //fill some caches with the item 1
+    LOGGER.info("Client 304 performs a read request");
+    clientList.get(4).tell(new DoReadMsg(1), ActorRef.noSender());
 
     inputContinue();
 
-    // client 300 critical write for item 1
-    LOGGER.info("Client300 critical write for item 1 and value 5");
-    clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
+    LOGGER.info("Cache200 crash before sending the confirmation to the client");
+    l2List.get(0).tell(new CrashMsg(CrashType.BEFORE_WRITE_CONFIRM), ActorRef.noSender());
 
+    LOGGER.info("Client 300 performs a write request");
+    clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
 
-
-
-    /*// client 300 critical asks for item 1
-    LOGGER.info("Client300 critical read for item 1");
-    clientList.get(0).tell(new DoCritReadMsg(1), ActorRef.noSender());
-  // client 300 critical asks for item 2
-    LOGGER.info("Client300 critical read for item 2");
-    clientList.get(0).tell(new DoCritReadMsg(2), ActorRef.noSender());
-    // client 304 critical asks for item 1
-    LOGGER.info("Client304 critical read for item 2");
-    clientList.get(4).tell(new DoCritReadMsg(2), ActorRef.noSender());
-    // client 300 critical asks for item 1
-    LOGGER.info("Client304 critical read for item 1");
-    clientList.get(4).tell(new DoCritReadMsg(1), ActorRef.noSender());
-
-    inputContinue();
-
-    // client 300 critical write for item 1
-    LOGGER.info("Client300 critical write for item 1");
-    clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
-
-    // client 304 critical write for item 2
-    LOGGER.info("Client300 critical write for item 2");
-    clientList.get(4).tell(new DoCritWriteMsg(2, 5), ActorRef.noSender());
-
-    inputContinue();
-
-    // client 300 critical asks for item 1
-    LOGGER.info("Client300 critical read for item 1");
-    clientList.get(0).tell(new DoCritReadMsg(1), ActorRef.noSender());
-    // client 300 critical asks for item 2
-    LOGGER.info("Client300 critical read for item 2");
-    clientList.get(0).tell(new DoCritReadMsg(2), ActorRef.noSender());
-    // client 304 critical asks for item 1
-    LOGGER.info("Client304 critical read for item 2");
-    clientList.get(4).tell(new DoCritReadMsg(2), ActorRef.noSender());
-    // client 300 critical asks for item 1
-    LOGGER.info("Client304 critical read for item 1");
-    clientList.get(4).tell(new DoCritReadMsg(1), ActorRef.noSender());
-    */
-    inputContinue();
+    inputContinue(2000);
+    LOGGER.info("PRINT INTERNAL STATE");
+    l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
+    l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));
     system.terminate();
   }
 

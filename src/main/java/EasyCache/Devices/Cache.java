@@ -79,7 +79,7 @@ public class Cache extends AbstractActor {
    * @param dest is the actorRef of the destination actor
    */
   private void sendMessage(Message m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(10)); }
+    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());
   }
@@ -218,10 +218,12 @@ public class Cache extends AbstractActor {
       savedItems.put(key, msg.value);
       ActorRef nextHop = msg.responsePath.pop();
       LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to " + nextHop.path().name() + "; timeout_cancelled;");
-      pendingReq.get(msg.uuid).cancel();
-      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-      if (Config.VERBOSE_LOG)
-        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      if(pendingReq.containsKey(msg.uuid)) { // it may happen that the cache has crashed before receiving the response and so lost the list of the pending requests.
+        pendingReq.get(msg.uuid).cancel();
+        pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+        if (Config.VERBOSE_LOG)
+          LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      }
       sendMessage(msg, nextHop);
     }
   }
@@ -360,10 +362,12 @@ public class Cache extends AbstractActor {
       savedItems.put(key, msg.value);
       ActorRef nextHop = msg.responsePath.pop();
       LOGGER.debug("Cache " + this.id + "; crit_read_resp_for_item = " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to " + nextHop.path().name() + "; timeout_cancelled;");
-      pendingReq.get(msg.uuid).cancel();
-      pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-      if (Config.VERBOSE_LOG)
-        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      if(pendingReq.containsKey(msg.uuid)) {
+        pendingReq.get(msg.uuid).cancel();
+        pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+        if (Config.VERBOSE_LOG)
+          LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
+      }
       sendMessage(msg, nextHop);
     }
   }
@@ -583,7 +587,7 @@ public class Cache extends AbstractActor {
    */
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
-      LOGGER.debug("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " MSG_id: " + msg.awaitedMsg.uuid);
+      LOGGER.warn("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " MSG_id: " + msg.awaitedMsg.uuid);
       this.parent=this.db;
       LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name() + "; refreshing_the_cache;");
 
@@ -731,13 +735,17 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle StartRefreshMsg message which is received by a L1 cache
+   * This method is used to handle StartRefreshMsg message which is sent by a L1 cache
    * This message will notify to a L2 cache that the L1 has recovered before L2 viewed the timeout
    * The L2 cache starts to refill all its items, because it could have missed some refills
    * @param msg is the StartRefreshMsg message.
    */
   private void onStartRefreshMsg(StartRefreshMsg msg){
     LOGGER.debug("Cache " + this.id + "; start_refreshing_items " + ";");
+    pendingReq.values().forEach(Cancellable::cancel);
+    CancelTimeoutMsg cancelTimeoutMsg = new CancelTimeoutMsg(pendingReq.keySet());
+    multicast(cancelTimeoutMsg);
+    pendingReq.clear();
     refreshItems();
   }
 
@@ -755,7 +763,7 @@ public class Cache extends AbstractActor {
 
   //TODO spostato in un altro metodo ausiliario tutta la logica del clear delle strutture dati
   private void crashingOps(){
-    LOGGER.debug("Cache " + this.id + "; is_now_crashed;");
+    LOGGER.debug("Cache " + this.id + "; is_now_crashed_for: " + this.recoveryAfter + " ms; ");
     pendingReq.values().forEach(Cancellable::cancel);
     pendingUpdates.values().forEach(Cancellable::cancel);
     pendingUpdates.clear();

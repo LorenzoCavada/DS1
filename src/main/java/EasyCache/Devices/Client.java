@@ -56,13 +56,13 @@ public class Client extends AbstractActor {
    * @param m is the message to be sent to the parent
    */
   private void sendMessage(Message m){
-    try { Thread.sleep(rnd.nextInt(10)); }
+    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     parent.tell(m, getSelf());
   }
 
   private void sendMessage(Message m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(10)); }
+    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());
   }
@@ -277,7 +277,7 @@ public class Client extends AbstractActor {
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;");
+    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; MSG_ID: " + msg.uuid + "; timeout_canceled;");
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -416,7 +416,7 @@ public class Client extends AbstractActor {
    */
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
-      LOGGER.warn("Client " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key);
+      LOGGER.warn("Client " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid + "; ");
       int newParentIdx= rnd.nextInt(availableL2.size());
       while(availableL2.get(newParentIdx).equals(parent)){
         newParentIdx= rnd.nextInt(availableL2.size());
@@ -446,6 +446,16 @@ public class Client extends AbstractActor {
       response=false;
     }
     sendMessage(new IsStillParentRespMsg(response, msg.uuid), getSender());
+  }
+
+  private void onCancelTimeoutMsg(CancelTimeoutMsg msg) {
+    for(UUID uuid : msg.uuids){
+      if(pendingReq.containsKey(uuid)){
+        pendingReq.get(uuid).cancel();
+        pendingReq.remove(uuid);
+        LOGGER.error("Client " + this.id + "; error_in_req: " + uuid + "; timeout_cancelled");
+      }
+    }
   }
 
   /* -- END OF crash handling message methods ----------------------------------------------------- */
@@ -486,6 +496,7 @@ public class Client extends AbstractActor {
       .match(InternalStateMsg.class, this::onInternalStateMsg)
       .match(ReqErrorMsg.class, this::onReqErrorMsg)
       .match(CritWriteErrorMsg.class, this::onCritWriteErrorMsg)
+      .match(CancelTimeoutMsg.class, this::onCancelTimeoutMsg)
       .build();
   }
 }

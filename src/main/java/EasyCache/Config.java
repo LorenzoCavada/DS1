@@ -14,15 +14,17 @@ public class Config implements Serializable {
     final public static int N_CLIENT = N_L2 * 2; // number of clients
     final public static int N_ITEMS = 20; // number of items to be stored in the DB
 
+    final public static int SEND_MAX_DELAY = 50; // maximum delay for sending messages
+
     final public static int RECOVERY_DELAY = 1500; //caches recover after these milliseconds
 
-    final public static int TIMEOUT_CACHE = 500; //cache goes in timeout after 500 ms
+    final public static int TIMEOUT_CACHE = SEND_MAX_DELAY * 5; //cache goes in timeout after 5 times the maximum delay of the message
 
     final public static int TIMEOUT_CACHE_INVALIDATION = 400; //
 
     final public static int TIMEOUT_DB_INVALIDATION = 300; //
 
-    final public static int TIMEOUT_CLIENT = 1000; //client goes in timeout after 1000 ms
+    final public static int TIMEOUT_CLIENT = SEND_MAX_DELAY * 10; //client goes in timeout after 10 times the maximum delay of the message
 
     final public static boolean VERBOSE_LOG = false; //if true, prints verbose log messages
     // Method to print the current run configuration

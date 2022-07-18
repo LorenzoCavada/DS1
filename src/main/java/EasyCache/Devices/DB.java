@@ -52,7 +52,7 @@ public class DB extends AbstractActor {
    * @param dest is the actorRef of the destination actor
    */
   private void sendMessage(Message m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(10)); }
+    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
     catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, getSelf());
   }
@@ -106,7 +106,7 @@ public class DB extends AbstractActor {
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
     ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; read_response_sent;");
+    LOGGER.debug("DB " + this.id + "; read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; MSG_ID: " + msg.uuid + "; read_response_sent; ");
     sendMessage(resp, nextHop);
   }
 
