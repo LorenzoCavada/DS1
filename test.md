@@ -856,43 +856,53 @@
 # Main for random execution
 
 ```
-    inputContinue();
+inputContinue();
     InternalStateMsg internalState = new InternalStateMsg();
     Random rnd = new Random();
+    int[] clients = {0,1,2,3,4,5,6,7};
+    shuffleArray(clients, rnd);
 
     for(int i = 0; i < 11; i++){
-      int client = rnd.nextInt(Config.N_CLIENT);
-      int op = rnd.nextInt(4);
-      int item = rnd.nextInt(Config.N_ITEMS)+1;
-
-      switch (op){
-        case 0: //READ
-          LOGGER.info("Performing READ operation on client " + client + " for item " + item);
-          randomCrash(4, 1, rnd, l1List, l2List);
-          DoReadMsg readMsg = new DoReadMsg(item);
-          sendMessage(readMsg, clientList.get(client), rnd);
-          break;
-        case 1: //WRITE
-          LOGGER.info("Performing WRITE operation on client " + client + " for item " + item);
-          randomCrash(5, 5, rnd, l1List, l2List);
-          DoWriteMsg writeMsg = new DoWriteMsg(item, rnd.nextInt(11));
-          sendMessage(writeMsg, clientList.get(client), rnd);
-          break;
-        case 2: //CRIT READ
-          LOGGER.info("Performing CRITICAL READ operation on client " + client + " for item " + item);
-          randomCrash(3, 10, rnd, l1List, l2List);
-          DoCritReadMsg critRead = new DoCritReadMsg(item);
-          sendMessage(critRead, clientList.get(client), rnd);
-          break;
-        case 3: //CRIT WRITE
-          LOGGER.info("Performing CRITICAL WRITE operation on client " + client + " for item " + item);
-          randomCrash(10, 13, rnd, l1List, l2List);
-          DoCritWriteMsg critWrite = new DoCritWriteMsg(item, rnd.nextInt(11));
-          sendMessage(critWrite, clientList.get(client), rnd);
-          break;
+      boolean couldCrash = true;
+      for(int j = 0; j < rnd.nextInt(clients.length); j++) {
+        int client = clients[j];
+        int op = rnd.nextInt(3);
+        int item = rnd.nextInt(Config.N_ITEMS) + 1;
+        switch (op) {
+          case 0: //READ
+            LOGGER.info("Performing READ operation on client " + client + " for item " + item);
+            if(couldCrash)
+              couldCrash = randomCrash(4, 1, rnd, l1List, l2List);
+            DoReadMsg readMsg = new DoReadMsg(item);
+            sendMessage(readMsg, clientList.get(client), rnd);
+            break;
+          case 1: //WRITE
+            LOGGER.info("Performing WRITE operation on client " + client + " for item " + item);
+            if(couldCrash)
+              couldCrash = randomCrash(5, 5, rnd, l1List, l2List);
+            DoWriteMsg writeMsg = new DoWriteMsg(item, rnd.nextInt(11));
+            sendMessage(writeMsg, clientList.get(client), rnd);
+            break;
+          case 2: //CRIT READ
+            LOGGER.info("Performing CRITICAL READ operation on client " + client + " for item " + item);
+            if(couldCrash)
+              couldCrash = randomCrash(3, 10, rnd, l1List, l2List);
+            DoCritReadMsg critRead = new DoCritReadMsg(item);
+            sendMessage(critRead, clientList.get(client), rnd);
+            break;
+          case 3: //CRIT WRITE
+            LOGGER.info("Performing CRITICAL WRITE operation on client " + client + " for item " + item);
+            if(couldCrash)
+              couldCrash = randomCrash(10, 13, rnd, l1List, l2List);
+            DoCritWriteMsg critWrite = new DoCritWriteMsg(item, rnd.nextInt(11));
+            sendMessage(critWrite, clientList.get(client), rnd);
+            break;
+        }
       }
+      shuffleArray(clients, rnd);
       inputContinue(2000);
     }
+
 
     LOGGER.info("PRINT INTERNAL STATE");
     l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
