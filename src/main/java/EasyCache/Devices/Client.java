@@ -137,7 +137,7 @@ public class Client extends AbstractActor {
     ReadReqMsg msgToSend = new ReadReqMsg(msg.key, msg.uuid);
     msgToSend.responsePath.push(getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_read_request_for_item: " + msgToSend.key + "; MSG_id: " + msgToSend.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; starting_read_request_for_item: " + msgToSend.key + "; MSG_ID: " + msgToSend.uuid + ";");
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
@@ -199,7 +199,7 @@ public class Client extends AbstractActor {
     CritReadReqMsg msgToSend = new CritReadReqMsg(msg.key, msg.uuid);
     msgToSend.responsePath.push(getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_critical_read_request_for_item: " + msgToSend.key + "; MSG_id: " + msgToSend.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; starting_critical_read_request_for_item: " + msgToSend.key + "; MSG_ID: " + msgToSend.uuid + ";");
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message

@@ -221,7 +221,7 @@ public class Cache extends AbstractActor {
       Integer key = msg.key;
       savedItems.put(key, msg.value);
       ActorRef nextHop = msg.responsePath.pop();
-      LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to " + nextHop.path().name() + "; timeout_cancelled;");
+      LOGGER.debug("Cache " + this.id + "; read_resp_for_item = " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to " + nextHop.path().name() + "; timeout_cancelled;");
       if(pendingReq.containsKey(msg.uuid)) { // it may happen that the cache has crashed before receiving the response and so lost the list of the pending requests.
         pendingReq.get(msg.uuid).cancel();
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
@@ -248,7 +248,7 @@ public class Cache extends AbstractActor {
       if(this.nextCrash==CrashType.BEFORE_WRITE_REQ_FW){
         crashingOps();
       }else {
-        LOGGER.debug("Cache " + this.id + "; write_req_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to_parent: " + parent.path().name() + ";");
+        LOGGER.debug("Cache " + this.id + "; write_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to_parent: " + parent.path().name() + ";");
         if (this.type == CacheType.L2) { //if the cache is an L2 cache, the write request is associated with a timer to detect the potential crash of its parent
           pendingReq.put(msg.uuid,
                   getContext().system().scheduler().scheduleOnce(
@@ -284,7 +284,7 @@ public class Cache extends AbstractActor {
       crashingOps();
     }else {
       if (savedItems.containsKey(key)) {
-        LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; value: " + msg.newValue + ";");
+        LOGGER.debug("Cache " + this.id + "; refill_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; value: " + msg.newValue + ";");
         savedItems.put(key, msg.newValue);
       }
       if (this.type == CacheType.L1) {
@@ -310,7 +310,7 @@ public class Cache extends AbstractActor {
             crashingOps();
           }else {
             WriteConfirmMsg resp = new WriteConfirmMsg(msg.key, msg.uuid);
-            LOGGER.debug("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
+            LOGGER.debug("Cache " + this.id + "; write_ack_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
             sendMessage(resp, originator);
           }
         }
@@ -330,7 +330,7 @@ public class Cache extends AbstractActor {
     if (invalidItems.contains(msg.key)){
       ReqErrorMsg errMsg=new ReqErrorMsg(msg);
       ActorRef nextHop = msg.responsePath.pop();
-      LOGGER.error("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; crit_write_is_performing;");
+      LOGGER.error("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; crit_write_is_performing;");
       sendMessage(errMsg, nextHop);
     }else {
       if(this.nextCrash==CrashType.BEFORE_CRIT_READ_REQ_FW){
@@ -452,7 +452,7 @@ public class Cache extends AbstractActor {
                           getSelf()                                           // source of the message (myself)
                   )); //adding the uuid of the message to the list of the pending ones
           InvalidationItemConfirmMsg confirmMsg = new InvalidationItemConfirmMsg(msg.key, msg.uuid);
-          LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; invalidation_confirm_send_to " + this.parent.path().name() + ";");
+          LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; invalidation_confirm_send_to " + this.parent.path().name() + ";");
           sendMessage(confirmMsg, this.parent);
         }
       }
@@ -467,7 +467,7 @@ public class Cache extends AbstractActor {
 
   //TODO addCrash
   private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
-    LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; MSG_id: " + msg.awaitedMsg.uuid + "; removing_item_from_memory;");
+    LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid + "; removing_item_from_memory;");
     this.invalidItems.remove(msg.awaitedMsg.key);
     this.savedItems.remove(msg.awaitedMsg.key);
   }
@@ -482,7 +482,7 @@ public class Cache extends AbstractActor {
     if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_RESP){
       crashingOps();
     }else {
-      LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; from_cache: " + getSender().path().name() + ";");
+      LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; from_cache: " + getSender().path().name() + ";");
       if (this.invalidConfirmations.containsKey(msg.uuid)) {
         this.invalidConfirmations.get(msg.uuid).add(getSender());
       } else {
@@ -524,7 +524,7 @@ public class Cache extends AbstractActor {
     }else {
       Integer key = msg.key;
       if (savedItems.containsKey(key)) {
-        LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; value: " + msg.newValue + ";");
+        LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; value: " + msg.newValue + ";");
         savedItems.put(key, msg.newValue);
       }
       if (this.invalidItems.contains(key)) {
@@ -533,7 +533,7 @@ public class Cache extends AbstractActor {
       if (this.type == CacheType.L1) {
         if (Config.VERBOSE_LOG)
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
-        LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to_children;");
+        LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to_children;");
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
         this.invalidConfirmations.remove(msg.uuid); //removing the uuid of the message from the list of the invalidConfirmation
         if(this.nextCrash==CrashType.DURING_CRIT_REFILL_MULTICAST){
@@ -560,7 +560,7 @@ public class Cache extends AbstractActor {
             crashingOps();
           }else {
             CritWriteConfirmMsg resp = new CritWriteConfirmMsg(msg.key, msg.uuid);
-            LOGGER.debug("Cache " + this.id + "; crit_write_ack_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
+            LOGGER.debug("Cache " + this.id + "; crit_write_ack_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
             sendMessage(resp, originator);
           }
         }
@@ -577,7 +577,7 @@ public class Cache extends AbstractActor {
     if(this.type == CacheType.L1){
       if(Config.VERBOSE_LOG)
         LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
-      LOGGER.error("Cache " + this.id + "; crit_write_failed_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to_children;");
+      LOGGER.error("Cache " + this.id + "; crit_write_failed_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to_children;");
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       this.invalidConfirmations.remove(msg.uuid); //removing the uuid of the message from the list of the invalidConfirmation
       if(this.nextCrash==CrashType.DURING_CRIT_WRITE_ERROR_MULTICAST){
@@ -600,7 +600,7 @@ public class Cache extends AbstractActor {
       }
       ActorRef originator = msg.originator;
       if(children.contains(originator)) {
-        LOGGER.error("Cache " + this.id + "; crit_write_failed_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
+        LOGGER.error("Cache " + this.id + "; crit_write_failed_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to: " + msg.originator.path().name() + "; timeout_cancelled;");
         sendMessage(msg, originator);
       }
     }
