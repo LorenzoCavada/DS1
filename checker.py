@@ -12,19 +12,22 @@ def listAllIds():
       id=x.split("MSG_ID: ")[1].split(";")[0].rstrip()
       if id not in result:
         result.append(id)
+  f.close()
   return result
 
 
 def main():
   f = open("EasyCache.log", "r")
+  lines=f.readlines()
   listIds=listAllIds()
-  for x in f:
-    if args.id is not None:
+  if args.id is not None:
+    for x in lines:
       if args.id in x:
         print(x.rstrip())
-    else:
-      for id in listIds:
-        if id in x:
+  else:
+    for extractedId in listIds:
+      for x in lines:
+        if extractedId in x:
           print(x.rstrip())
 
 if __name__ == '__main__':
