@@ -125,31 +125,43 @@ public class ProjectRunner {
 
     // ---- END OF INITIALIZATION ----
     inputContinue();
-
-    // message for checking the internal state of the caches
     InternalStateMsg internalState = new InternalStateMsg();
+    Random rnd = new Random();
 
-    //fill some caches with the item 1
-    LOGGER.info("Client 300 performs a read request");
-    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+    for(int i = 0; i < 51; i++){
+      int client = rnd.nextInt(Config.N_CLIENT);
+      int op = rnd.nextInt(4);
+      int item = rnd.nextInt(Config.N_ITEMS);
 
-    //fill some caches with the item 1
-    LOGGER.info("Client 302 performs a read request");
-    clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
+      switch (op){
+        case 0: //READ
+          LOGGER.info("Performing READ operation on client " + client + " for item " + item);
+          randomCrash(4, 1, rnd, l1List, l2List);
+          DoReadMsg readMsg = new DoReadMsg(item);
+          clientList.get(client).tell(readMsg, ActorRef.noSender());
+          break;
+        case 1: //WRITE
+          LOGGER.info("Performing WRITE operation on client " + client + " for item " + item);
+          randomCrash(5, 5, rnd, l1List, l2List);
+          DoWriteMsg writeMsg = new DoWriteMsg(item, rnd.nextInt(11));
+          clientList.get(client).tell(writeMsg, ActorRef.noSender());
+          break;
+        case 2: //CRIT READ
+          LOGGER.info("Performing CRITICAL READ operation on client " + client + " for item " + item);
+          randomCrash(3, 10, rnd, l1List, l2List);
+          DoCritReadMsg critRead = new DoCritReadMsg(item);
+          clientList.get(client).tell(critRead, ActorRef.noSender());
+          break;
+        case 3: //CRIT WRITE
+          LOGGER.info("Performing CRITICAL WRITE operation on client " + client + " for item " + item);
+          randomCrash(10, 13, rnd, l1List, l2List);
+          DoCritWriteMsg critWrite = new DoCritWriteMsg(item, rnd.nextInt(11));
+          clientList.get(client).tell(critWrite, ActorRef.noSender());
+          break;
+      }
+    }
 
-    //fill some caches with the item 1
-    LOGGER.info("Client 304 performs a read request");
-    clientList.get(4).tell(new DoReadMsg(1), ActorRef.noSender());
-
-    inputContinue();
-
-    LOGGER.info("Cache100 crash while multicasting the refill");
-    l1List.get(0).tell(new CrashDuringMulticastMsg(CrashType.DURING_REFILL_MULTICAST, 1), ActorRef.noSender());
-
-    LOGGER.info("Client 302 performs a write request");
-    clientList.get(2).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
-
-    inputContinue(2000);
+    inputContinue(60*1000);
     LOGGER.info("PRINT INTERNAL STATE");
     l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
     l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));
@@ -164,5 +176,15 @@ public class ProjectRunner {
   public static void inputContinue() {
     try { Thread.sleep(1000); }
     catch (InterruptedException e) { e.printStackTrace(); }
+  }
+
+  private static void randomCrash(int end, int gap, Random rnd, ArrayList<ActorRef> l1List, ArrayList<ActorRef> l2List) {
+    if(rnd.nextInt(100) < 25) {
+      int crash = rnd.nextInt(end) + gap;
+      if(rnd.nextBoolean())
+        l1List.get(rnd.nextInt(Config.N_L1)).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
+      else
+        l2List.get(rnd.nextInt(Config.N_L2)).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
+    }
   }
 }
