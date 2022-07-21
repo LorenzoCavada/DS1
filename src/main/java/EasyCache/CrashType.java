@@ -26,6 +26,11 @@ public enum CrashType {
     BEFORE_CRIT_REFILL, //before crit refill is applied in a cache
     BEFORE_CRIT_WRITE_CONFIRM, //before a crit write confirm is sent (only L2 caches)
     //OTHERS
-    DURING_MULTICAST, //crashes during multicast
+    DURING_REFILL_MULTICAST, //crashes during multicast
+    DURING_INVALID_ITEM_MULTICAST,
+    DURING_CRIT_REFILL_MULTICAST,
+    DURING_CRIT_WRITE_ERROR_MULTICAST,
+
+    DURING_CANCEL_TIMEOUT_MULTICAST,
     NONE
 }

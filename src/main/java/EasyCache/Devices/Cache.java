@@ -9,13 +9,11 @@ import akka.actor.Cancellable;
 import akka.actor.Props;
 import EasyCache.CacheType;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
-import scala.None;
 import scala.concurrent.duration.Duration;
 
 public class Cache extends AbstractActor {
@@ -90,15 +88,20 @@ public class Cache extends AbstractActor {
    * The multicast will use Thread.sleep in order to simulate a network delay.
    * @param m represents the message to be sent to the children.
    */
+
   private void multicast(Message m) {
-    int i = 0;
-    boolean couldCrash=(this.nextCrash==CrashType.DURING_MULTICAST);
     for (ActorRef p: children) {
-      if(couldCrash && i>=this.afterNMessageSent){
+      sendMessage(m, p);
+    }
+  }
+
+  private void multicastAndCrash(Message m) {
+    int i = 0;
+    for (ActorRef p: children) {
+      if(i>=this.afterNMessageSent){
         crashingOps();
         return;
       }
-
       sendMessage(m, p);
       i++;
     }
@@ -289,7 +292,11 @@ public class Cache extends AbstractActor {
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
         // is case is a L1 cache no timer needs to be removed because there is no timer associated to the request sent to the DB duo to the fact that the DB cannot crash
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
-        multicast(msg);
+        if(this.nextCrash==CrashType.DURING_REFILL_MULTICAST){
+          multicastAndCrash(msg);
+        }else {
+          multicast(msg);
+        }
       } else if (this.type == CacheType.L2) {
         if (Config.VERBOSE_LOG)
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
@@ -423,7 +430,11 @@ public class Cache extends AbstractActor {
       this.invalidItems.add(msg.key);
       if (this.type.equals(CacheType.L1)) {
         LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; invalidation_sent_to_children;");
-        multicast(msg);
+        if(this.nextCrash==CrashType.DURING_INVALID_ITEM_MULTICAST){
+          multicastAndCrash(msg);
+        }else {
+          multicast(msg);
+        }
       } else if (this.type.equals(CacheType.L2)) {
         if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
           crashingOps();
@@ -449,6 +460,8 @@ public class Cache extends AbstractActor {
    * This can happen only on the L2 cache in the case that its L1 parent crash while waiting the results of the critical write.
    * @param msg
    */
+
+  //TODO addCrash
   private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
     LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; MSG_id: " + msg.awaitedMsg.uuid + "; removing_item_from_memory;");
     this.invalidItems.remove(msg.awaitedMsg.key);
@@ -515,7 +528,11 @@ public class Cache extends AbstractActor {
         LOGGER.debug("Cache " + this.id + "; crit_refill_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to_children;");
         pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
         this.invalidConfirmations.remove(msg.uuid); //removing the uuid of the message from the list of the invalidConfirmation
-        multicast(msg);
+        if(this.nextCrash==CrashType.DURING_CRIT_REFILL_MULTICAST){
+          multicastAndCrash(msg);
+        }else {
+          multicast(msg);
+        }
       } else if (this.type == CacheType.L2) {
         if (pendingUpdates.containsKey(msg.uuid)) {
           pendingUpdates.get(msg.uuid).cancel();
@@ -542,7 +559,7 @@ public class Cache extends AbstractActor {
       }
     }
   }
-
+  //TODO addCrash
   private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
     Integer key = msg.key;
     if(this.invalidItems.contains(key)){
@@ -555,7 +572,11 @@ public class Cache extends AbstractActor {
       LOGGER.error("Cache " + this.id + "; crit_write_failed_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; forward_to_children;");
       pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
       this.invalidConfirmations.remove(msg.uuid); //removing the uuid of the message from the list of the invalidConfirmation
-      multicast(msg);
+      if(this.nextCrash==CrashType.DURING_CRIT_WRITE_ERROR_MULTICAST){
+        multicastAndCrash(msg);
+      }else {
+        multicast(msg);
+      }
     }else if(this.type == CacheType.L2){
       if(pendingUpdates.containsKey(msg.uuid)){
         pendingUpdates.get(msg.uuid).cancel();
@@ -591,6 +612,7 @@ public class Cache extends AbstractActor {
    * Then it will remove the request to the list of the pending one and will notify, throw an ReqErrorMsg to the originator of the request that the request has failed.
    * @param msg is the TimeoutMsg message which contains a copy of the request that has failed.
    */
+  //TODO addCrash
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
       LOGGER.warn("Cache " + this.id + "; timeout_while_await_item: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid);
@@ -644,6 +666,7 @@ public class Cache extends AbstractActor {
    * This method is used to refresh the saved items of the cache.
    * This may be needed when the cache detect the crash of its L1 parent cache or when the L1 parent cache recover from a crash.
    */
+  //TODO addCrash
   private void refreshItems(){
     LOGGER.debug("Cache " + this.id + "; refreshing_cache_using_parent: " + this.parent.path().name() + ";");
     for(int i : savedItems.keySet()){
@@ -662,6 +685,7 @@ public class Cache extends AbstractActor {
    * In this way the L1 cache will be able also to restore its memory.
    * @param msg
    */
+  //TODO addCrash
   private void onRefreshItemReqMsg(RefreshItemReqMsg msg){
     LOGGER.debug("Cache " + this.id + "; forwarding_refresh_req_for_item: " + msg.key + ";");
     msg.responsePath.push(getSelf());
@@ -675,6 +699,7 @@ public class Cache extends AbstractActor {
    * In the second case the L2 cache will update its memory with the value received but there won't be any next hop to forward the message.
    * @param msg
    */
+  //TODO addCrash
   private void onRefreshItemRespMsg(RefreshItemRespMsg msg) {
     LOGGER.debug("Cache " + this.id + "; refreshing_item_in_cache: " + msg.key + "; setting_value: " + msg.value + "; refresh_completed;");
     savedItems.put(msg.key, msg.value);
@@ -710,6 +735,7 @@ public class Cache extends AbstractActor {
    * If the L2 cache did not detect the cache of its parent it will notify that is still its children, otherwise it will notify that is not its children anymore.
    * @param msg is the IsStillParentReqMsg which is used to notify if the cache is still a children of a L1 cache after that it has recover.
    */
+  //TODO addCrash
   private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
     ActorRef sender = getSender();
     boolean response;
@@ -729,6 +755,7 @@ public class Cache extends AbstractActor {
    * tell it to refresh all it's items, because it could have missed some refill message originated by clients not in its subtree
    * @param msg is the IsStillParentRespMsg message which contains the answer to the IsStillParentReqMsg request.
    */
+  //TODO addCrash
   private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
     if (!msg.response){
       LOGGER.debug("Cache " + this.id + "; is_not_parent_of: " + getSender().path().name() + ";");
@@ -747,14 +774,19 @@ public class Cache extends AbstractActor {
    * The L2 cache starts to refill all its items, because it could have missed some refills
    * @param msg is the StartRefreshMsg message.
    */
+  //TODO addCrash
   private void onStartRefreshMsg(StartRefreshMsg msg){
     pendingReq.values().forEach(Cancellable::cancel);
     CancelTimeoutMsg cancelTimeoutMsg = new CancelTimeoutMsg(pendingReq.keySet());
-    multicast(cancelTimeoutMsg);
-    pendingReq.clear();
-    if(savedItems.size() > 0){
-      LOGGER.debug("Cache " + this.id + "; start_refreshing_items" + ";");
-      refreshItems();
+    if(this.nextCrash==CrashType.DURING_CANCEL_TIMEOUT_MULTICAST){
+      multicastAndCrash(cancelTimeoutMsg);
+    }else{
+      multicast(cancelTimeoutMsg);
+      pendingReq.clear();
+      if(savedItems.size() > 0){
+        LOGGER.debug("Cache " + this.id + "; start_refreshing_items" + ";");
+        refreshItems();
+      }
     }
   }
 
@@ -772,7 +804,6 @@ public class Cache extends AbstractActor {
     }
   }
 
-  //TODO spostato in un altro metodo ausiliario tutta la logica del clear delle strutture dati
   private void crashingOps(){
     LOGGER.debug("Cache " + this.id + "; is_now_crashed_for: " + this.recoveryAfter + " ms; ");
     pendingReq.values().forEach(Cancellable::cancel);

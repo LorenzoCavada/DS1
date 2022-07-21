@@ -220,10 +220,6 @@
 |----------------------------------------------------------------------------------------------------------------|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Crash before applying the refill to the saved items of the L1 cache in the path between the client and the DB. | BEFORE_REFILL | The L2 which originate the request detect the crash of the L1 cache and set the database as its parent. It will start the refresh process and will see the new value but cannot tell if is the one it has just sent. The cache will be up to date but an error message to the client will be sent to stop the timeout. In our system the error message means that there has been an error while processing the request and we cannot ensure that the operation has been performed. We follow the at least once semantic. The client will decide if to perform again the write or not. |
 
-
-
-
-
 ```
     //fill some caches with the item 1
     LOGGER.info("Client 300 performs a read request");
@@ -288,6 +284,57 @@
 ```
 
 ## Write Crash 8
+
+| Crash                                                                                  | CrashMsg                 | Description                                                                                                                                                                                                                                                     |
+|----------------------------------------------------------------------------------------|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| L1 cache crashes while multicasting the refill to the L2 caches that are its children  | DURING_REFILL_MULTICAST  | It depends on the order in which the children are saved. If the L2 cache in the path between the originator and the db is not filled, then the client will not receive the write confirmation, but instead an error. Otherwise it will receive the confirmation |
+
+```
+        //fill some caches with the item 1
+    LOGGER.info("Client 300 performs a read request");
+    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    //fill some caches with the item 1
+    LOGGER.info("Client 302 performs a read request");
+    clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    //fill some caches with the item 1
+    LOGGER.info("Client 304 performs a read request");
+    clientList.get(4).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    inputContinue();
+
+    LOGGER.info("Cache100 crash while multicasting the refill");
+    l1List.get(0).tell(new CrashDuringMulticastMsg(CrashType.DURING_REFILL_MULTICAST, 1), ActorRef.noSender());
+
+    LOGGER.info("Client 302 performs a write request");
+    clientList.get(2).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
+```
+
+```
+        //fill some caches with the item 1
+    LOGGER.info("Client 300 performs a read request");
+    clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    //fill some caches with the item 1
+    LOGGER.info("Client 302 performs a read request");
+    clientList.get(2).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    //fill some caches with the item 1
+    LOGGER.info("Client 304 performs a read request");
+    clientList.get(4).tell(new DoReadMsg(1), ActorRef.noSender());
+
+    inputContinue();
+
+    LOGGER.info("Cache100 crash while multicasting the refill");
+    l1List.get(0).tell(new CrashDuringMulticastMsg(CrashType.DURING_REFILL_MULTICAST, 1), ActorRef.noSender());
+
+    LOGGER.info("Client 300 performs a write request");
+    clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
+```
+
+
+## Write Crash 9
 
 | Crash                                                                     | CrashMsg             | Description                                                                                                                                                      |
 |---------------------------------------------------------------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
