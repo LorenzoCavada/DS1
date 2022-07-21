@@ -137,7 +137,7 @@ public class Client extends AbstractActor {
     ReadReqMsg msgToSend = new ReadReqMsg(msg.key, msg.uuid);
     msgToSend.responsePath.push(getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_read_request_for_item: " + msgToSend.key + "; MSG_id: " + msgToSend.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; starting_read_request_for_item: " + msgToSend.key + "; MSG_ID: " + msgToSend.uuid + ";");
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
@@ -160,7 +160,7 @@ public class Client extends AbstractActor {
   private void onReadRespMsg(ReadRespMsg msg) {
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_ID: " + msg.uuid + "; timeout_cancelled;");
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -197,7 +197,7 @@ public class Client extends AbstractActor {
     CritReadReqMsg msgToSend = new CritReadReqMsg(msg.key, msg.uuid);
     msgToSend.responsePath.push(getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_critical_read_request_for_item: " + msgToSend.key + "; MSG_id: " + msgToSend.uuid + ";");
+    LOGGER.debug("Client " + this.id + "; starting_critical_read_request_for_item: " + msgToSend.key + "; MSG_ID: " + msgToSend.uuid + ";");
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
                     Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
@@ -220,7 +220,7 @@ public class Client extends AbstractActor {
   private void onCritReadRespMsg(CritReadRespMsg msg) {
     pendingReq.get(msg.uuid).cancel();
     pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_ID: " + msg.uuid + "; timeout_cancelled;");
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
