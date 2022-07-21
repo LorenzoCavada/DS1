@@ -158,9 +158,11 @@ public class Client extends AbstractActor {
    * @param msg ReadRespMsg message which contains the result of the read request.
    */
   private void onReadRespMsg(ReadRespMsg msg) {
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    if(pendingReq.containsKey(msg.uuid)){
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid);
+      LOGGER.debug("Client " + this.id + "; read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    }
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -218,9 +220,11 @@ public class Client extends AbstractActor {
    * @param msg ReadRespMsg message which contains the result of the read request.
    */
   private void onCritReadRespMsg(CritReadRespMsg msg) {
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value +"; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    if(pendingReq.containsKey(msg.uuid)) {
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid);
+      LOGGER.debug("Client " + this.id + "; critical_read_response_for_item: " + msg.key + " = " + msg.value + "; read_confirmed; MSG_id: " + msg.uuid + "; timeout_cancelled;");
+    }
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -276,9 +280,11 @@ public class Client extends AbstractActor {
    * @param msg is the WriteConfirmMsg message which contains the result of the write request.
    */
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; MSG_ID: " + msg.uuid + "; timeout_canceled;");
+    if(pendingReq.containsKey(msg.uuid)) {
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid);
+      LOGGER.debug("Client " + this.id + "; write_response_for_item: " + msg.key + "; write_confirmed; MSG_ID: " + msg.uuid + "; timeout_canceled;");
+    }
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);

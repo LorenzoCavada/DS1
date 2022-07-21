@@ -31,7 +31,7 @@ public class ProjectRunner {
 
     // creating items list
     HashMap<Integer, Integer> items = new HashMap<Integer, Integer>();
-    for (int i = 0; i < Config.N_ITEMS; i++) {
+    for (int i = 1; i <= Config.N_ITEMS; i++) {
       items.put(i, i);
     }
 
@@ -128,44 +128,51 @@ public class ProjectRunner {
     InternalStateMsg internalState = new InternalStateMsg();
     Random rnd = new Random();
 
-    for(int i = 0; i < 51; i++){
+    for(int i = 0; i < 11; i++){
       int client = rnd.nextInt(Config.N_CLIENT);
       int op = rnd.nextInt(4);
-      int item = rnd.nextInt(Config.N_ITEMS);
+      int item = rnd.nextInt(Config.N_ITEMS)+1;
 
       switch (op){
         case 0: //READ
           LOGGER.info("Performing READ operation on client " + client + " for item " + item);
           randomCrash(4, 1, rnd, l1List, l2List);
           DoReadMsg readMsg = new DoReadMsg(item);
-          clientList.get(client).tell(readMsg, ActorRef.noSender());
+          sendMessage(readMsg, clientList.get(client), rnd);
           break;
         case 1: //WRITE
           LOGGER.info("Performing WRITE operation on client " + client + " for item " + item);
           randomCrash(5, 5, rnd, l1List, l2List);
           DoWriteMsg writeMsg = new DoWriteMsg(item, rnd.nextInt(11));
-          clientList.get(client).tell(writeMsg, ActorRef.noSender());
+          sendMessage(writeMsg, clientList.get(client), rnd);
           break;
         case 2: //CRIT READ
           LOGGER.info("Performing CRITICAL READ operation on client " + client + " for item " + item);
           randomCrash(3, 10, rnd, l1List, l2List);
           DoCritReadMsg critRead = new DoCritReadMsg(item);
-          clientList.get(client).tell(critRead, ActorRef.noSender());
+          sendMessage(critRead, clientList.get(client), rnd);
           break;
         case 3: //CRIT WRITE
           LOGGER.info("Performing CRITICAL WRITE operation on client " + client + " for item " + item);
           randomCrash(10, 13, rnd, l1List, l2List);
           DoCritWriteMsg critWrite = new DoCritWriteMsg(item, rnd.nextInt(11));
-          clientList.get(client).tell(critWrite, ActorRef.noSender());
+          sendMessage(critWrite, clientList.get(client), rnd);
           break;
       }
+      inputContinue(2000);
     }
 
-    inputContinue(60*1000);
+
     LOGGER.info("PRINT INTERNAL STATE");
     l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
     l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));
     system.terminate();
+  }
+
+  public static void sendMessage(Message m, ActorRef dest, Random rnd){
+    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
+    catch (InterruptedException e) { e.printStackTrace(); }
+    dest.tell(m, ActorRef.noSender());
   }
 
   public static void inputContinue(int delay) {
@@ -179,12 +186,18 @@ public class ProjectRunner {
   }
 
   private static void randomCrash(int end, int gap, Random rnd, ArrayList<ActorRef> l1List, ArrayList<ActorRef> l2List) {
-    if(rnd.nextInt(100) < 25) {
+    if(rnd.nextInt(100) < 50) {
       int crash = rnd.nextInt(end) + gap;
-      if(rnd.nextBoolean())
-        l1List.get(rnd.nextInt(Config.N_L1)).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
-      else
-        l2List.get(rnd.nextInt(Config.N_L2)).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
+      if(rnd.nextBoolean()) {
+        int cache = rnd.nextInt(Config.N_L1);
+        l1List.get(cache).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
+        LOGGER.error("CRASHING CACHE " + 10 + cache + "; CACHETYPE: "+CrashType.values()[crash]);
+      } else {
+        int cache = rnd.nextInt(Config.N_L2);
+        l2List.get(cache).tell(new CrashMsg(CrashType.values()[crash]), ActorRef.noSender());
+        LOGGER.error("CRASHING CACHE " + 20 + cache + "; CACHETYPE: "+CrashType.values()[crash]);
+
+      }
     }
   }
 }

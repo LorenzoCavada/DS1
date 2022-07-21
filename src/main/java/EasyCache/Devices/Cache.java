@@ -430,6 +430,10 @@ public class Cache extends AbstractActor {
       this.invalidItems.add(msg.key);
       if (this.type.equals(CacheType.L1)) {
         LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; invalidation_sent_to_children;");
+        if(children.size() <= 1){
+          LOGGER.debug("Cache " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; not_need_to_wait_confirmation_from_the_children; sending_confirmation;");
+          sendInvalidationConfirmation(new InvalidationItemConfirmMsg(msg.key, msg.uuid));
+        }
         if(this.nextCrash==CrashType.DURING_INVALID_ITEM_MULTICAST){
           multicastAndCrash(msg);
         }else {
@@ -490,13 +494,17 @@ public class Cache extends AbstractActor {
       // When recovers it will update
       // just == children.size -1 confirmations are enough, not >= children.size -1 to avoid resending
       if (this.invalidConfirmations.get(msg.uuid).size() == (this.children.size() - 1)) {
-        if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
-          crashingOps();
-        }else {
-          LOGGER.debug("Cache " + this.id + "; all_invalidation_confirm_received_for: " + msg.key + "; MSG_ID: " + msg.uuid + "; send_to: " + this.parent.path().name() + ";");
-          sendMessage(msg, this.parent);
-        }
+        sendInvalidationConfirmation(msg);
       }
+    }
+  }
+
+  private void sendInvalidationConfirmation(InvalidationItemConfirmMsg msg){
+    if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
+      crashingOps();
+    }else {
+      LOGGER.debug("Cache " + this.id + "; all_invalidation_confirm_received_for: " + msg.key + "; MSG_ID: " + msg.uuid + "; send_to: " + this.parent.path().name() + ";");
+      sendMessage(msg, this.parent);
     }
   }
 

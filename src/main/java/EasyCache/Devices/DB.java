@@ -102,11 +102,11 @@ public class DB extends AbstractActor {
    * After that it will create the response message and then send it.
    * @param msg
    */
-  private void onReadReqMsg(ReadReqMsg msg){
+  private void onReadReqMsg(ReadReqMsg msg) {
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
-    ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     LOGGER.debug("DB " + this.id + "; read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; MSG_ID: " + msg.uuid + "; read_response_sent; ");
+    ReadRespMsg resp = new ReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     sendMessage(resp, nextHop);
   }
 
@@ -122,8 +122,8 @@ public class DB extends AbstractActor {
   private void onCritReadReqMsg(CritReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
     Integer key = msg.key;
-    CritReadRespMsg resp = new CritReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     LOGGER.debug("DB " + this.id + "; critical_read_request_received_from: " + nextHop.path().name() + "; key: " + key + "; MSG_ID: " + msg.uuid + "; critical_read_response_sent;");
+    CritReadRespMsg resp = new CritReadRespMsg(key, this.items.get(key), msg.responsePath, msg.uuid);
     sendMessage(resp, nextHop);
   }
 
@@ -136,10 +136,8 @@ public class DB extends AbstractActor {
    */
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
     Integer key = msg.key;
-
-
-
     if(!isPerformingCritWriteOnItem(msg.key)){
+      LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; sending_invalidation");
       this.critWrites.put(msg.uuid, msg);
       InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
       invalidAckTimeouts.put(msg.uuid,
@@ -150,7 +148,6 @@ public class DB extends AbstractActor {
                       getContext().system().dispatcher(),                 // system dispatcher
                       getSelf()                                           // source of the message (myself)
               )); //adding the uuid of the message to the list of the pending ones
-      LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; sending_invalidation");
       multicast(invalidMsg);
     }else{
       LOGGER.error("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; already_in_progress");
@@ -209,7 +206,14 @@ public class DB extends AbstractActor {
      * @param msg
      */
   private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
-    LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; ");
+    UUID req = msg.awaitedMsg.uuid;
+    StringBuilder sb = new StringBuilder();
+    for(ActorRef child : this.children){
+      if(!receivedInvalidAck.get(req).contains(child)){
+        sb.append(child.path().name() + "; ");
+      }
+    }
+    LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; waiting_for: " + sb + "; ");
     CritWriteReqMsg associatedReq=this.critWrites.get(msg.awaitedMsg.uuid);
     //check for akka bugs
     if(this.receivedInvalidAck.get(msg.awaitedMsg.uuid).size()==this.children.size()){
@@ -261,7 +265,7 @@ public class DB extends AbstractActor {
     if (!this.children.contains(msg.child))
       this.children.add(msg.child);
     StringBuilder sb = new StringBuilder();
-    for (ActorRef c: children) {
+    for (ActorRef c : children) {
       sb.append(c.path().name() + ";");
     }
     LOGGER.debug("DB; adding_new_child: " + msg.child.path().name() + "; new_children_list: [" + sb + "];");
