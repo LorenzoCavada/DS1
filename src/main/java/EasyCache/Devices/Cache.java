@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import scala.None;
 import scala.concurrent.duration.Duration;
 
 public class Cache extends AbstractActor {
@@ -387,7 +388,7 @@ public class Cache extends AbstractActor {
       if (this.type == CacheType.L2) {
         pendingReq.put(msg.uuid,
                 getContext().system().scheduler().scheduleOnce(
-                        Duration.create(Config.TIMEOUT_CACHE, TimeUnit.MILLISECONDS),        // when to send the message
+                        Duration.create(Config.TIMEOUT_CACHE_CRIT_WRITE, TimeUnit.MILLISECONDS),        // when to send the message
                         getSelf(),                                          // destination actor reference
                         new TimeoutReqMsg(msg),                                  // the message to send
                         getContext().system().dispatcher(),                 // system dispatcher
@@ -421,7 +422,7 @@ public class Cache extends AbstractActor {
     }else {
       this.invalidItems.add(msg.key);
       if (this.type.equals(CacheType.L1)) {
-        LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_id: " + msg.uuid + "; invalidation_sent_to_children;");
+        LOGGER.debug("Cache " + this.id + "; invalidation_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; invalidation_sent_to_children;");
         multicast(msg);
       } else if (this.type.equals(CacheType.L2)) {
         if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
@@ -476,8 +477,12 @@ public class Cache extends AbstractActor {
       // When recovers it will update
       // just == children.size -1 confirmations are enough, not >= children.size -1 to avoid resending
       if (this.invalidConfirmations.get(msg.uuid).size() == (this.children.size() - 1)) {
-        LOGGER.debug("Cache " + this.id + "; all_invalidation_confirm_received_for: : " + msg.key + "; MSG_id: " + msg.uuid + "; send_to: " + this.parent.path().name() + ";");
-        sendMessage(msg, this.parent);
+        if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
+          crashingOps();
+        }else {
+          LOGGER.debug("Cache " + this.id + "; all_invalidation_confirm_received_for: " + msg.key + "; MSG_ID: " + msg.uuid + "; send_to: " + this.parent.path().name() + ";");
+          sendMessage(msg, this.parent);
+        }
       }
     }
   }
@@ -542,6 +547,7 @@ public class Cache extends AbstractActor {
     Integer key = msg.key;
     if(this.invalidItems.contains(key)){
       this.invalidItems.remove(key);
+      LOGGER.debug("Cache " + this.id + "; item: " + key + "; now_valid; MSG_ID: " + msg.uuid + ";");
     }
     if(this.type == CacheType.L1){
       if(Config.VERBOSE_LOG)
@@ -587,14 +593,10 @@ public class Cache extends AbstractActor {
    */
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
-      LOGGER.warn("Cache " + this.id + "; timeout_while_await: " + msg.awaitedMsg.key + " MSG_id: " + msg.awaitedMsg.uuid);
+      LOGGER.warn("Cache " + this.id + "; timeout_while_await_item: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid);
       this.parent=this.db;
-      LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name() + "; refreshing_the_cache;");
+      LOGGER.debug("Cache " + this.id + "; new_parent_selected: " + this.parent.path().name() + ";");
 
-      refreshItems();
-
-      AddChildMsg addMeMsg=new AddChildMsg(getSelf());
-      sendMessage(addMeMsg, this.parent);
       pendingReq.remove(msg.awaitedMsg.uuid);
 
       ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
@@ -604,11 +606,11 @@ public class Cache extends AbstractActor {
         if(dest.equals(getSelf())) // the response stack of the failed request contain on the top the cache itself so we need to pop 2 times in order to get the reference of the next hop
           dest = ((CritReadReqMsg) msg.awaitedMsg).responsePath.pop();
 
-        LOGGER.debug("Cache " + this.id + "; sending_crit_read_error_message_to: " + dest.path().name() + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
+        LOGGER.debug("Cache " + this.id + "; sending_crit_read_error_message_to: " + dest.path().name() + "; MSG_ID: " + msg.awaitedMsg.uuid + ";");
         sendMessage(errMsg, dest);
       }else if(msg.awaitedMsg instanceof CritWriteReqMsg){
         ActorRef originator = ((CritWriteReqMsg) msg.awaitedMsg).originator;
-        LOGGER.debug("Cache " + this.id + "; sending_crit_write_error_message_to: " + originator.path().name() + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
+        LOGGER.debug("Cache " + this.id + "; sending_crit_write_error_message_to: " + originator.path().name() + "; MSG_ID: " + msg.awaitedMsg.uuid + ";");
         if(this.pendingUpdates.containsKey(msg.awaitedMsg.uuid)){
           this.pendingUpdates.get(msg.awaitedMsg.uuid).cancel();
           this.pendingUpdates.remove(msg.awaitedMsg.uuid);
@@ -622,14 +624,19 @@ public class Cache extends AbstractActor {
         if(dest.equals(getSelf())) // the response stack of the failed request contain on the top the cache itself so we need to pop 2 times in order to get the reference of the next hop
           dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
 
-        LOGGER.debug("Cache " + this.id + "; sending_read_error_message_to: " + dest.path().name() + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
+        LOGGER.debug("Cache " + this.id + "; sending_read_error_message_to: " + dest.path().name() + "; MSG_ID: " + msg.awaitedMsg.uuid + ";");
         sendMessage(errMsg, dest);
       }else if(msg.awaitedMsg instanceof WriteReqMsg){
-        LOGGER.debug("Cache " + this.id + "; sending_write_error_message_to: " + ((WriteReqMsg) msg.awaitedMsg).originator.path().name() + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
+        LOGGER.debug("Cache " + this.id + "; sending_write_error_message_to: " + ((WriteReqMsg) msg.awaitedMsg).originator.path().name() + "; MSG_ID: " + msg.awaitedMsg.uuid + ";");
         sendMessage(errMsg, ((WriteReqMsg) msg.awaitedMsg).originator);
       }
+
+      AddChildMsg addMeMsg=new AddChildMsg(getSelf());
+      sendMessage(addMeMsg, this.parent);
+      if(savedItems.size() > 0)
+        refreshItems();
     }else{
-      LOGGER.debug("Cache " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key + "; MSG_id: " + msg.awaitedMsg.uuid + ";");
+      LOGGER.debug("Cache " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid + ";");
     }
   }
 
@@ -741,12 +748,14 @@ public class Cache extends AbstractActor {
    * @param msg is the StartRefreshMsg message.
    */
   private void onStartRefreshMsg(StartRefreshMsg msg){
-    LOGGER.debug("Cache " + this.id + "; start_refreshing_items " + ";");
     pendingReq.values().forEach(Cancellable::cancel);
     CancelTimeoutMsg cancelTimeoutMsg = new CancelTimeoutMsg(pendingReq.keySet());
     multicast(cancelTimeoutMsg);
     pendingReq.clear();
-    refreshItems();
+    if(savedItems.size() > 0){
+      LOGGER.debug("Cache " + this.id + "; start_refreshing_items" + ";");
+      refreshItems();
+    }
   }
 
   /**
@@ -754,10 +763,12 @@ public class Cache extends AbstractActor {
    * @param msg is the CrashMsg message which is sent by the main class and used to make crash a node.
    */
   private void onCrashMsg(CrashMsg msg){
-    this.nextCrash=msg.type;
-    this.recoveryAfter=msg.delay;
-    if(this.nextCrash==CrashType.NOW){
-      crashingOps();
+    if(this.nextCrash == CrashType.NONE) {
+      this.nextCrash = msg.type;
+      this.recoveryAfter = msg.delay;
+      if (this.nextCrash == CrashType.NOW) {
+        crashingOps();
+      }
     }
   }
 
@@ -782,9 +793,11 @@ public class Cache extends AbstractActor {
   }
 
   private void onCrashDuringMulticastMsg(CrashDuringMulticastMsg msg){
-    this.nextCrash=msg.type;
-    this.afterNMessageSent=msg.afterNMessage;
-    this.recoveryAfter = msg.delay;
+    if(this.nextCrash == CrashType.NONE) {
+      this.nextCrash = msg.type;
+      this.afterNMessageSent = msg.afterNMessage;
+      this.recoveryAfter = msg.delay;
+    }
   }
 
   /* -- END OF crash handling message methods --------------------------------------------------------- */

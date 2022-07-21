@@ -314,10 +314,10 @@ public class Client extends AbstractActor {
   private void doCritWriteReq(DoCritWriteMsg msg){
     CritWriteReqMsg msgToSend = new CritWriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
     sendMessage(msgToSend);
-    LOGGER.debug("Client " + this.id + "; starting_crit_write_request_for_item: " + msgToSend.key + " newValue: "+msgToSend.newValue + " msg_id: " + msg.uuid);
+    LOGGER.debug("Client " + this.id + "; starting_crit_write_request_for_item: " + msgToSend.key + "; newValue: "+msgToSend.newValue + " MSG_ID: " + msg.uuid + ";");
     pendingReq.put(msgToSend.uuid,
             getContext().system().scheduler().scheduleOnce(
-                    Duration.create(Config.TIMEOUT_CLIENT, TimeUnit.MILLISECONDS),        // when to send the message
+                    Duration.create(Config.TIMEOUT_CLIENT_CRIT_WRITE, TimeUnit.MILLISECONDS),        // when to send the message
                     getSelf(),                                          // destination actor reference
                     new TimeoutReqMsg(msg),                                  // the message to send
                     getContext().system().dispatcher(),                 // system dispatcher
@@ -334,9 +334,11 @@ public class Client extends AbstractActor {
    * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
    */
   private void onCritWriteConfirmMsg(CritWriteConfirmMsg msg){
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid);
-    LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; write_confirmed; timeout_canceled;"+ " msg_id: " + msg.uuid);
+    if(pendingReq.containsKey(msg.uuid)) {
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid);
+      LOGGER.debug("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; critical_write_confirmed; timeout_canceled;" + " msg_id: " + msg.uuid);
+    }
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -352,9 +354,11 @@ public class Client extends AbstractActor {
    * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
    */
   private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
-    pendingReq.get(msg.uuid).cancel();
-    pendingReq.remove(msg.uuid);
-    LOGGER.error("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; crit_write_error; timeout_canceled;");
+    if(pendingReq.containsKey(msg.uuid)) {
+      LOGGER.error("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; crit_write_error; timeout_canceled;");
+      pendingReq.get(msg.uuid).cancel();
+      pendingReq.remove(msg.uuid);
+    }
     if (!this.waitingReqs.isEmpty()){
       IdMessage nextMsg=this.waitingReqs.remove();
       doNext(nextMsg);
@@ -388,16 +392,18 @@ public class Client extends AbstractActor {
    * @param msg is the ReqErrMsg message sent by the parent L2 cache. It contains the uuid of the failed request
    */
   private void onReqErrorMsg(ReqErrorMsg msg) {
-    pendingReq.get(msg.awaitedMsg.uuid).cancel();
-    pendingReq.remove(msg.awaitedMsg.uuid);
-    if(msg.awaitedMsg instanceof CritReadReqMsg){
-      LOGGER.error("Client " + this.id + "; error_in_crit_read_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key);
-    }else if(msg.awaitedMsg instanceof CritWriteReqMsg){
-      LOGGER.error("Client " + this.id + "; error_in_crit_write_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
-    }else if(msg.awaitedMsg instanceof ReadReqMsg){
-      LOGGER.error("Client " + this.id + "; error_in_read_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key);
-    }else if(msg.awaitedMsg instanceof WriteReqMsg){
-      LOGGER.error("Client " + this.id + "; error_in_write_req: " + msg.awaitedMsg.uuid + "; for key: "+ msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
+    if(pendingReq.containsKey(msg.awaitedMsg.uuid)) {
+      pendingReq.get(msg.awaitedMsg.uuid).cancel();
+      pendingReq.remove(msg.awaitedMsg.uuid);
+    }
+    if (msg.awaitedMsg instanceof CritReadReqMsg) {
+      LOGGER.error("Client " + this.id + "; error_in_crit_read_req: " + msg.awaitedMsg.uuid + "; for key: " + msg.awaitedMsg.key);
+    } else if (msg.awaitedMsg instanceof CritWriteReqMsg) {
+      LOGGER.error("Client " + this.id + "; error_in_crit_write_req: " + msg.awaitedMsg.uuid + "; for key: " + msg.awaitedMsg.key + "; value: " + ((CritWriteReqMsg) msg.awaitedMsg).newValue);
+    } else if (msg.awaitedMsg instanceof ReadReqMsg) {
+      LOGGER.error("Client " + this.id + "; error_in_read_req: " + msg.awaitedMsg.uuid + "; for key: " + msg.awaitedMsg.key);
+    } else if (msg.awaitedMsg instanceof WriteReqMsg) {
+      LOGGER.error("Client " + this.id + "; error_in_write_req: " + msg.awaitedMsg.uuid + "; for key: " + msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
     }
   }
 

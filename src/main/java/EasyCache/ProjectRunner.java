@@ -129,22 +129,20 @@ public class ProjectRunner {
     // message for checking the internal state of the caches
     InternalStateMsg internalState = new InternalStateMsg();
 
-    //fill some caches with the item 1
-    /*LOGGER.info("Client 300 performs a read request");
+    LOGGER.info("Filling up some caches with item 1");
     clientList.get(0).tell(new DoReadMsg(1), ActorRef.noSender());
-    //fill some caches with the item 1
-    LOGGER.info("Client 304 performs a read request");
+    clientList.get(3).tell(new DoReadMsg(1), ActorRef.noSender());
     clientList.get(4).tell(new DoReadMsg(1), ActorRef.noSender());
 
     inputContinue();
 
-    LOGGER.info("Cache200 crash before sending the confirmation to the client");
-    l2List.get(0).tell(new CrashMsg(CrashType.BEFORE_WRITE_CONFIRM), ActorRef.noSender());
+    LOGGER.info("Cache200 crashes after sending the invalidation item confirm but only for 1 ms");
+    l2List.get(0).tell(new CrashMsg(CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND, 1), ActorRef.noSender());
 
-    LOGGER.info("Client 300 performs a write request");
-    clientList.get(0).tell(new DoWriteMsg(1, 5), ActorRef.noSender());
+    LOGGER.info("Client 300 performs a critical write request");
+    clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
 
-    inputContinue(2000);*/
+    inputContinue(2000);
     LOGGER.info("PRINT INTERNAL STATE");
     l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
     l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));

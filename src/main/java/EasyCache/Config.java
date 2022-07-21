@@ -10,9 +10,9 @@ public class Config implements Serializable {
     private static final Logger LOGGER = LogManager.getLogger(ProjectRunner.class);
 
     final public static int N_L1 = 2; // number of L1 caches
-    final public static int N_L2 = 5; // number of L2 caches
-    final public static int N_CLIENT = 14; // number of clients
-    final public static int N_ITEMS = 20; // number of items to be stored in the DB
+    final public static int N_L2 = N_L1 * 2; // number of L2 caches
+    final public static int N_CLIENT = N_L2 * 2; // number of clients
+    final public static int N_ITEMS = 5; // number of items to be stored in the DB
 
     final public static int SEND_MAX_DELAY = 50; // maximum delay for sending messages
 
@@ -20,11 +20,15 @@ public class Config implements Serializable {
 
     final public static int TIMEOUT_CACHE = SEND_MAX_DELAY * 5; //cache goes in timeout after 5 times the maximum delay of the message
 
-    final public static int TIMEOUT_CACHE_INVALIDATION = 400; //
+    final public static int TIMEOUT_CACHE_CRIT_WRITE = SEND_MAX_DELAY * 10; //cache goes in timeout after 10 times the maximum delay of the message in case of a critical write operation
 
-    final public static int TIMEOUT_DB_INVALIDATION = 300; //
+    final public static int TIMEOUT_CACHE_INVALIDATION = SEND_MAX_DELAY * 7; //
+
+    final public static int TIMEOUT_DB_INVALIDATION = SEND_MAX_DELAY * 6; //
 
     final public static int TIMEOUT_CLIENT = SEND_MAX_DELAY * 10; //client goes in timeout after 10 times the maximum delay of the message
+
+    final public static int TIMEOUT_CLIENT_CRIT_WRITE = SEND_MAX_DELAY * 12; //client goes in timeout after 12 times the maximum delay of the message in case of a critical write operation
 
     final public static boolean VERBOSE_LOG = false; //if true, prints verbose log messages
     // Method to print the current run configuration
@@ -33,9 +37,5 @@ public class Config implements Serializable {
         LOGGER.info("N_L2: " + N_L2);
         LOGGER.info("N_CLIENT: " + N_CLIENT);
         LOGGER.info("N_ITEMS: " + N_ITEMS);
-        LOGGER.info("RECOVER_DELAY: " + RECOVERY_DELAY);
-        LOGGER.info("TIMEOUT_CACHE: " + TIMEOUT_CACHE);
-        LOGGER.info("TIMEOUT_CLIENT: " + TIMEOUT_CLIENT);
-        LOGGER.info("VERBOSE_LOG: " + VERBOSE_LOG);
     }
 }

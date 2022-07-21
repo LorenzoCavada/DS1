@@ -3,19 +3,21 @@ package EasyCache;
 // Enum used to identify the type of crashes
 public enum CrashType {
     NOW,
+    //READ OPERATION
     BEFORE_READ_REQ_FW, //before a read request is forwarded to the parent
-    BEFORE_CRIT_READ_REQ_FW, //before a crit read request is forwarded to the parent
     AFTER_READ_REQ_FW, //after a read request is forwarded to the parent
-    AFTER_CRIT_READ_REQ_FW, //after a crit read request is forwarded to the parent
-    BEFORE_READ_RESP, //before a read response (with cached value) is performed
     BEFORE_READ_RESP_FW, //before a read response is forwarded to a child
-    BEFORE_CRIT_READ_RESP_FW, //before a crit read response is forwarded to a child
-    DURING_MULTICAST, //crashes during multicast
+    BEFORE_READ_RESP, //before a read response (with cached value) is performed
+    //WRITE OPERATION
     BEFORE_WRITE_REQ_FW, //before a write request is forwarded to the parent
     AFTER_WRITE_REQ_FW, //after a write request is forwarded to the parent
-
     BEFORE_REFILL, //before refill is applied in a cache
     BEFORE_WRITE_CONFIRM, //before a write confirm is sent (only L2 caches)
+    //CRITICAL READ
+    BEFORE_CRIT_READ_REQ_FW, //before a crit read request is forwarded to the parent
+    AFTER_CRIT_READ_REQ_FW, //after a crit read request is forwarded to the parent
+    BEFORE_CRIT_READ_RESP_FW, //before a crit read response is forwarded to a child
+    //CRITICAL WRITE
     BEFORE_CRIT_WRITE_REQ_FW, //before a crit write request is forwarded to parent
     AFTER_CRIT_WRITE_REQ_FW, //after a crit write request is forwarded to parent
     BEFORE_ITEM_INVALIDATION, //before item invalidation request is applied
@@ -23,5 +25,7 @@ public enum CrashType {
     BEFORE_ITEM_INVALID_CONFIRM_RESP, //before item invalidation arrives from L2 caches
     BEFORE_CRIT_REFILL, //before crit refill is applied in a cache
     BEFORE_CRIT_WRITE_CONFIRM, //before a crit write confirm is sent (only L2 caches)
+    //OTHERS
+    DURING_MULTICAST, //crashes during multicast
     NONE
 }
