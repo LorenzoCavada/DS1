@@ -864,6 +864,10 @@ public class Cache extends AbstractActor {
     LOGGER.debug(sb);
   }
 
+  private void onSupportMsg(SupportMsg msg){
+    this.nextCrash = CrashType.NONE;
+  }
+
   /* -- END OF debug methods --------------------------------------------------------- */
 
 
@@ -897,6 +901,7 @@ public class Cache extends AbstractActor {
             .match(StartRefreshMsg.class, this::onStartRefreshMsg)
             .match(TimeoutUpdateCWMsg.class, this::onTimeoutUpdateCWMsg)
             .match(CritWriteErrorMsg.class, this::onCritWriteErrorMsg)
+            .match(SupportMsg.class, this::onSupportMsg)
             .build();
   }
 

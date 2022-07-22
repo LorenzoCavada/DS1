@@ -126,6 +126,7 @@ public class ProjectRunner {
     // ---- END OF INITIALIZATION ----
     inputContinue();
     InternalStateMsg internalState = new InternalStateMsg();
+    SupportMsg supMsg = new SupportMsg();
     Random rnd = new Random();
     int[] clients = {0,1,2,3,4,5,6,7};
     shuffleArray(clients, rnd);
@@ -169,6 +170,9 @@ public class ProjectRunner {
       }
       shuffleArray(clients, rnd);
       inputContinue(2000);
+      l1List.forEach(l1 -> l1.tell(supMsg, ActorRef.noSender()));
+      l2List.forEach(l2 -> l2.tell(supMsg, ActorRef.noSender()));
+      inputContinue(100);
     }
 
 
