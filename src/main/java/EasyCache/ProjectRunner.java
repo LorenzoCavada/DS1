@@ -183,8 +183,6 @@ public class ProjectRunner {
   }
 
   public static void sendMessage(Message m, ActorRef dest, Random rnd){
-    try { Thread.sleep(rnd.nextInt(10)); }
-    catch (InterruptedException e) { e.printStackTrace(); }
     dest.tell(m, ActorRef.noSender());
   }
 
