@@ -32,5 +32,6 @@ public enum CrashType {
     DURING_CRIT_REFILL_MULTICAST,
     DURING_CRIT_WRITE_ERROR_MULTICAST,
     DURING_CANCEL_TIMEOUT_MULTICAST,
+    DURING_REFRESH, //before a read request is forwarded to the parent
     NONE
 }
