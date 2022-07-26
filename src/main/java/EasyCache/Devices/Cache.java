@@ -21,34 +21,34 @@ public class Cache extends AbstractActor {
   private Random rnd = new Random(); // Used to generate random value
   private ActorRef parent; // reference to the parent, may be a L1 Cache or the DB
 
-  private ActorRef db;
-  private List<ActorRef> children; // the list of children, they can be or a list of L2 caches or a list of Clients
-  private final int id; // ID of the current actor
-  private final CacheType type; // type of the current cache, may be L1 or L2
+  private ActorRef db; //reference to the db, used when changing parent to DB in a L2 cache
+  private List<ActorRef> children; // the list of children, they can be or a list of L2 caches (in L1 cache) or a list of Clients (in L2 cache)
+  private final int id; // ID of this actor
+  private final CacheType type; // type of the this cache, may be L1 or L2
   private Map<UUID, Cancellable> pendingReq; // map of all the pending request which are still waiting for a response, with the corresponding timer
 
   private HashMap<Integer, Integer> savedItems; // the items saved in the cache
 
   private Set<Integer> invalidItems; //items that are temporarily invalid while critical write is propagated
 
-  private Map<UUID, Cancellable> pendingUpdates; // map of all the pending updates for criticalWrites
+  private Map<UUID, Cancellable> pendingUpdates; // map of all the critical write request for which we are waiting the refill
 
-  private Map<UUID, Set<ActorRef>> invalidConfirmations;
+  private Map<UUID, Set<ActorRef>> invalidConfirmations; //in L1 cache, this map contains the set of children for which we have received a invalidItemConfirmationMsg
 
-  private CrashType nextCrash; //next crash in the node
+  private CrashType nextCrash; //next scheduled crash for this cache
 
-  private int afterNMessageSent; //in case of crash during multicast, this parameter will tell after how many multicast a L1 cache crashes
+  private int afterNMessageSent; //in case of next scheduled crash during a multicast, this parameter will tell after how many multicast a L1 cache crashes
 
-  private int recoveryAfter;
+  private int recoveryAfter; //in case of custom time of recovery (through the parameter in a crashmsg), the cache recovers after this amount of milliseconds
 
-  private static final Logger LOGGER = LogManager.getLogger(Cache.class);
+  private static final Logger LOGGER = LogManager.getLogger(Cache.class); //the instance for the logger
   /* -- Actor constructor --------------------------------------------------- */
 
   /**
    * Constructor of the Cache actor.
-   * @param id represents the ID of the current actor.
-   * @param type represents the type of the current cache, may be L1 or L2.
-   * @param db represents the reference to the DB actor.
+   * @param id the ID of constructed cache.
+   * @param type the {@link CacheType type} of the constructed cache, may be L1 or L2.
+   * @param db the reference to the {@link DB} actor.
    */
   public Cache(int id, CacheType type, ActorRef db) {
     this.id = id;
@@ -73,9 +73,9 @@ public class Cache extends AbstractActor {
   /* -- START OF Sending message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to send a message to a given actor, it will also simulate the network delays
-   * @param m is the message to send
-   * @param dest is the actorRef of the destination actor
+   * This method is used to send a {@link Message} to a given actor, simulating also a network delays
+   * @param m the {@link Message} to send
+   * @param dest the reference of the destination actor
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
@@ -89,17 +89,21 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to send a message to all the children of the cache.
-   * The multicast will use Thread.sleep in order to simulate a network delay.
-   * @param m represents the message to be sent to the children.
+   * This method is used to send a {@link Message} to all the children of the cache.
+   * Will call sendMessage to send the {@link Message} to a child
+   * @param m the {@link Message} to be sent to the children.
    */
-
   private void multicast(Message m) {
     for (ActorRef p: children) {
       sendMessage(m, p);
     }
   }
 
+  /**
+   * This method is used to crash while sending a {@link Message} to all the children of the cache.
+   * Will call sendMessage to send the {@link Message} to a child
+   * @param m the {@link Message} to be sent to the children.
+   */
   private void multicastAndCrash(Message m) {
     int i = 0;
     for (ActorRef p: children) {
@@ -119,8 +123,8 @@ public class Cache extends AbstractActor {
   /* -- START OF configuration message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to set the children of the cache. Is triggered by a SetChildrenMsg message.
-   * @param msg is the SetChildrenMsg message which contain the list of children of the cache.
+   * This method is used to set the children of the cache at the initialization of the tree
+   * @param msg the {@link SetChildrenMsg} message which contain the list of children to set.
    */
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
@@ -132,9 +136,10 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to add a new children to the cache.
-   * This usually happen when a client detect the crash of its L2 cache and choose a new L2 cache.
-   * @param msg is the AddChildMsg message which contains the new children to add to the list of the children of the cache.
+   * This method is used to add a new child to the cache.
+   * This usually happen when a {@link Client} detect the crash of its parent (L2 cache) and choose a new L2 cache as parent
+   * @param msg the {@link AddChildMsg} message which contains the reference to the new child to add to the list of the
+   * children of this cache.
    */
   private void onAddChildMsg(AddChildMsg msg) {
     if (!this.children.contains(msg.child))
@@ -147,8 +152,8 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to set the parent of the cache. Is triggered by a SetParentMsg message.
-   * @param msg is the SetParentMsg message which contains the reference to the parent of the cache.
+   * This method is used to set the parent of the cache at initialization.
+   * @param msg the {@link SetParentMsg} message which contains the reference to the parent to set.
    */
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent = msg.parent;
@@ -162,14 +167,12 @@ public class Cache extends AbstractActor {
   /* -- START OF write and read message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to handle the ReadReqMsg message that represent the read request message.
-   * This message can come both by a L2 cache or from a Client.
-   * If the requested element is in the cache, the value associated to the key is returned to the requester.
-   * Else the message is forwarded to the parent, that could be and L1 (in case is an L2 cache) or the DB.
-   * The message also contains a stack with the path followed by the message. This is used to understand where to send the response.
-   * If the cache does not have the requested element, the message is forwarded to the parent and a timeout is started.
-   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
-   * @param msg is the ReadReqMsg message which contains the key of the element to be read.
+   * This method is used to handle the arrival of a {@link ReadReqMsg} message.
+   * This message can come both from a L2 cache (in a L1 cache) or from a Client (in a L2 cache).
+   * If this cache does not have the requested element, the message is forwarded to the parent and a timer is started to
+   * check for possible crashes before receiving the associated {@link ReadRespMsg response}.
+   * Otherwise this cache will respond with the saved value.
+   * @param msg the {@link ReadReqMsg} message which contains the key of the element to be read.
    */
   private void onReadReqMsg(ReadReqMsg msg){
     if (invalidItems.contains(msg.key)){
@@ -213,11 +216,15 @@ public class Cache extends AbstractActor {
     }
   }
 
+
+
   /**
-   * This method is used to handle the ReadRespMsg message which represent the read response message.
-   * After receiving a read response the cache needs to store the value in its memory and then will forward it to its children.
-   * Also, the timer connected to the request is cancelled and the request is removed from the list of the pending ones.
-   * @param msg is the ReadRespMsg message which contains value of the requested item.
+   * This method is used to handle arrival of a {@link ReadRespMsg} message.
+   * This message can come both from the DB (in both types of caches) or from a L1 (in a L2 cache).
+   * This cache stores the value in its memory and then will forward the message to the child in the path towards the
+   * originator of the associated {@link ReadReqMsg request}.
+   * The timer of the associated {@link ReadReqMsg request} is cancelled.
+   * @param msg the {@link ReadRespMsg} message which contains value of the requested item.
    */
   private void onReadRespMsg(ReadRespMsg msg) {
     if(this.nextCrash==CrashType.BEFORE_READ_RESP_FW){
@@ -238,11 +245,12 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the WriteReqMsg message which represent the write request message.
-   * A cache can only forward the request to its parent till it reach the DB where the write will be applied.
-   * A timeout is also started.
-   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
-   * @param msg is the WriteReqMsg message which contains the key of the element to be written and the value to be written.
+   * This method is used to handle the arrival of a {@link WriteReqMsg} message.
+   * If the item to be modified is invalid because there is an ongoing {@link CritWriteReqMsg critical write}, a
+   * {@link ReqErrorMsg error} is sent to the sender.
+   * Otherwise the request will be forwarded to the parent because it is ultimately handled by the {@link DB database}.
+   * A timer is started to check for possible crashes before receiving the associated {@link RefillMsg refill}.
+   * @param msg the {@link WriteReqMsg} message which contains the key of the element to be written and the value to be written.
    */
   private void onWriteReqMsg(WriteReqMsg msg){
     if (invalidItems.contains(msg.key)){
@@ -275,13 +283,13 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the RefillMsg message. The RefillMsg message represent the ack of a write request.
-   * The cache will first check if the value is stored in its memory, in that case it will update it.
-   * Then, if the cache is a L1 cache, it will simply forward the message to all its children.
-   * If the cache is a L2 cache, it will check if the originator of the request is one of its children.
-   * If yes the L2 cache will send the confirmation of the write operation to the client.
-   * The request is also removed from the list of the pending ones and the timer associated to the request is cancelled.
-   * @param msg is the RefillMsg message which contains the key of the updated item and the new value.
+   * This method is used to handle the arrival of a {@link RefillMsg} message.
+   * If the propagated item is in this cache memory, the value is updated.
+   * If this cache is a L1, the message is forwarded to all its children.
+   * Otherwise (the cache is L2) the method sends a {@link WriteConfirmMsg confirmation} to one of its child if it
+   * is the originator of associated {@link WriteReqMsg request}.
+   * The timer of the associated {@link WriteReqMsg request} is cancelled.
+   * @param msg the {@link RefillMsg} message which contains the key of the updated item and the new value.
    */
   private void onRefillMsg(RefillMsg msg) {
     Integer key = msg.key;
@@ -296,7 +304,7 @@ public class Cache extends AbstractActor {
         if (Config.VERBOSE_LOG)
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
         // is case is a L1 cache no timer needs to be removed because there is no timer associated to the request sent to the DB duo to the fact that the DB cannot crash
-        pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+        pendingReq.remove(msg.uuid);
         if(this.nextCrash==CrashType.DURING_REFILL_MULTICAST){
           multicastAndCrash(msg);
         }else {
@@ -307,7 +315,7 @@ public class Cache extends AbstractActor {
           LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; remove_req_id: " + msg.uuid + ";");
         if (pendingReq.containsKey(msg.uuid)) {
           pendingReq.get(msg.uuid).cancel();
-          pendingReq.remove(msg.uuid); //removing the uuid of the message from the list of the pending ones
+          pendingReq.remove(msg.uuid);
         }
         ActorRef originator = msg.originator;
         if (children.contains(originator)) {
@@ -324,18 +332,17 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the CritReadReqMsg message that represent the critical read request message.
-   * This message can come both by a L2 cache or from a Client and will always be forwarded to the parent.
-   * The response will follow the ResponsePath stack which will contains all the hop that the message has passed.
-   * A timeout is also started.
-   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
-   * @param msg is the CritReadReqMsg message which contains the key of the element to be read from the database.
+   * This method is used to handle the arrival of a {@link CritReadReqMsg} message.
+   * This message can come both from a L2 cache (in a L1 cache) or from a Client (in a L2 cache).
+   * The message is forwarded to the parent because it is ultimately handled by the {@link DB database}.
+   * A timer is started to check for possible crashes before receiving the associated {@link CritReadRespMsg response}.
+   * @param msg the {@link CritReadReqMsg} message which contains the key of the element to be read from the database.
    */
   private void onCritReadReqMsg(CritReadReqMsg msg){
     if (invalidItems.contains(msg.key)){
       ReqErrorMsg errMsg=new ReqErrorMsg(msg);
       ActorRef nextHop = msg.responsePath.pop();
-      LOGGER.error("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; crit_write_is_performing;");
+      LOGGER.error("Cache " + this.id + "; crit_read_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; a_crit_write_is_performing;");
       sendMessage(errMsg, nextHop);
     }else {
       if(this.nextCrash==CrashType.BEFORE_CRIT_READ_REQ_FW){
@@ -362,10 +369,12 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the CritReadRespMsg message which represent the critical read response message.
-   * After receiving a critical read response the cache will also store or update the value in its memory and then will forward it to its children.
-   * Also, the timer connected to the request is cancelled and the request is removed from the list of the pending ones.
-   * @param msg is the CritReadRespMsg message which contains value of the requested item.
+   * This method is used to handle arrival of a {@link CritReadRespMsg} message.
+   * This message can come both from the DB (in both types of caches) or from a L1 (in a L2 cache).
+   * This cache stores the value in its memory and then will forward the message to the child in the path towards the
+   * originator of associated {@link CritReadReqMsg request}.
+   * The timer of the associated {@link CritReadReqMsg request} is cancelled.
+   * @param msg the {@link CritReadRespMsg} message which contains value of the requested item.
    */
   private void onCritReadRespMsg(CritReadRespMsg msg) {
     if(this.nextCrash==CrashType.BEFORE_CRIT_READ_RESP_FW){
@@ -386,48 +395,53 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the CritWriteReqMsg message which represent the write request message.
-   * A cache can only forward the request to its parent till it reach the DB where the critical write will be applied.
-   * A timeout is also started.
-   * If the timeout is reached the cache assume the crash of its parent and a TimeoutMsg is sent to the cache itself in order to trigger the crash protocol.
-   * @param msg is the WriteReqMsg message which contains the key of the element to be written and the value to be written.
+   * This method is used to handle the arrival of a {@link CritWriteReqMsg} message.
+   * If the item to be modified is invalid because there is another ongoing {@link CritWriteReqMsg critical write}, a
+   * {@link ReqErrorMsg error} is sent to the sender.
+   * Otherwise the request will be forwarded because it is ultimately handled by the {@link DB database}.
+   * A timer is started to check for possible crashes before receiving the associated {@link InvalidationItemMsg invalidation}.
+   * @param msg the {@link CritWriteReqMsg} message which contains the key of the element to be written and the value to be written.
    */
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
-    LOGGER.debug("Cache " + this.id + "; crit_write_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to_parent: " + parent.path().name() + ";");
-    if(this.nextCrash==CrashType.BEFORE_CRIT_WRITE_REQ_FW){
-      crashingOps();
+    if (invalidItems.contains(msg.key)) {
+      ReqErrorMsg errMsg = new ReqErrorMsg(msg);
+      LOGGER.error("Cache " + this.id + "; crit_write_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; another_crit_write_is_performing;");
+      sendMessage(errMsg, getSender());
     }else {
-      if (this.type == CacheType.L2) {
-        pendingReq.put(msg.uuid,
-                getContext().system().scheduler().scheduleOnce(
-                        Duration.create(Config.TIMEOUT_CACHE_CRIT_WRITE, TimeUnit.MILLISECONDS),        // when to send the message
-                        getSelf(),                                          // destination actor reference
-                        new TimeoutReqMsg(msg),                                  // the message to send
-                        getContext().system().dispatcher(),                 // system dispatcher
-                        getSelf()                                           // source of the message (myself)
-                )); //adding the uuid of the message to the list of the pending ones*/
-      }
-      if (Config.VERBOSE_LOG)
-        LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
-      sendMessage(msg, parent);
-      if(this.nextCrash==CrashType.AFTER_CRIT_WRITE_REQ_FW){
+      LOGGER.debug("Cache " + this.id + "; crit_write_req_for_item: " + msg.key + "; MSG_ID: " + msg.uuid + "; forward_to_parent: " + parent.path().name() + ";");
+      if (this.nextCrash == CrashType.BEFORE_CRIT_WRITE_REQ_FW) {
         crashingOps();
+      } else {
+        if (this.type == CacheType.L2) {
+          pendingReq.put(msg.uuid,
+                  getContext().system().scheduler().scheduleOnce(
+                          Duration.create(Config.TIMEOUT_CACHE_CRIT_WRITE, TimeUnit.MILLISECONDS),        // when to send the message
+                          getSelf(),                                          // destination actor reference
+                          new TimeoutReqMsg(msg),                                  // the message to send
+                          getContext().system().dispatcher(),                 // system dispatcher
+                          getSelf()                                           // source of the message (myself)
+                  )); //adding the uuid of the message to the list of the pending ones*/
+        }
+        if (Config.VERBOSE_LOG)
+          LOGGER.debug("Cache " + this.id + "; pending_req_list: " + pendingReq.keySet() + "; adding_req_id: " + msg.uuid + ";");
+        sendMessage(msg, parent);
+        if (this.nextCrash == CrashType.AFTER_CRIT_WRITE_REQ_FW) {
+          crashingOps();
+        }
       }
     }
   }
 
-    /**
-     * This method is used to handle the InvalidationItemMsg message which represent a step in the critical write process.
-     * Before perform the actual critical rite the DB needs to ensure that no cache will provide to its client the old value.
-     * To do so after receiving the critical read request the DB will send an InvalidationItemMsg to require the cache to invalidate a given item.
-     * Upon receving the InvalidationItemMsg the cache will first add the item to the list of the invalid ones. This list is checked before serving a write or read request.
-     * In this way the cache can block eventual read or write requests for an item which is undergoing a critical write.
-     * If the cache is also an L1 cache it will also send a message to the L2 cache in order to invalidate the item also in the children.
-     * Instead, if the cache is a L2 cache it will start a timer, it may happen indeed that the parent crash before forwarding the result of the critical write
-     * In this case the safest solution will be to remove the item from the memory in order to avoid the cache to serve the old value.
-     * After that a confirmation message is sent to the parent node.
-     * @param msg is the InvalidationItemMsg message which contains the key of the element to be invalidated.
-     */
+  /**
+   * This method is used to handle the arrival of a {@link InvalidationItemMsg} message.
+   * The item is added to the a list of invalid items, so this cache will not provide the old value to upcoming requests.
+   * This message can come both from the DB (in both types of caches) or from a L1 (in a L2 cache).
+   * If this cache is a L1 and has 0 or 1 child, it will send to the {@link DB database} a {@link InvalidationItemConfirmMsg confirmation}.
+   * If this cache is a L1 with at least 2 children, it will forward the message to its children.
+   * Otherwise (this cache is an L2) it will send to its parent a {@link InvalidationItemConfirmMsg confirmation} and a
+   * timer is set to check for crashes before the arrival of the associated {@link CritRefillMsg critical refill}.
+   * @param msg is the {@link InvalidationItemMsg} message which contains the key of the element to be invalidated.
+   */
   private void onInvalidationItemMsg(InvalidationItemMsg msg){
     if(this.nextCrash==CrashType.BEFORE_ITEM_INVALIDATION){
       crashingOps();
@@ -465,9 +479,11 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * If the timeout while waiting the CritRefill message expire we need to remove the invalid item from the memory.
-   * This can happen only on the L2 cache in the case that its L1 parent crash while waiting the results of the critical write.
-   * @param msg
+   * This method is used to handle the arrival of a {@link TimeoutUpdateCWMsg} message.
+   * This is triggered in a L2 cache when it detects the crash of its parent while waiting for a {@link CritRefillMsg critical refill}.
+   * The item becomes valid again.
+   *
+   * @param msg is the {@link TimeoutUpdateCWMsg} message
    */
   private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
     LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid + "; removing_item_from_memory;");
@@ -476,10 +492,12 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * Receiving an onInvalidationItemConfirmMsg means that a cache has correctly invalidated the item.
-   * This message will be triggered only on L1 cache which will wait the confirmations of invalidation from its children before sending its confirmation to the parent
-   * The cache will only wait children.size() - 1 confirmation because we can assume at max 1 crash at a time.
-   * @param msg
+   * This method is used to handle the arrival of a {@link InvalidationItemConfirmMsg} message.
+   * This method is triggered only in a L1 cache, that collects the {@link InvalidationItemConfirmMsg confirmations} from
+   * its children.
+   * When this cache collects children.size() - MAX_N_CACHE_CRASH {@link InvalidationItemConfirmMsg confirmations} it sends
+   * a {@link InvalidationItemConfirmMsg confirmation} to the {@link DB Database}.
+   * @param msg is the {@link InvalidationItemConfirmMsg} message which confirms that the sender has marked the item as invalid
    */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
     if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_RESP){
@@ -493,15 +511,20 @@ public class Cache extends AbstractActor {
         this.invalidConfirmations.get(msg.uuid).add(getSender());
       }
 
-      //I don't care if one confirmation does not arrive, because one L2 cache can crash but it is good anyway.
-      // When recovers it will update
-      // just == children.size -1 confirmations are enough, not >= children.size -1 to avoid resending
-      if (this.invalidConfirmations.get(msg.uuid).size() == (this.children.size() - 1)) {
+      //I don't care if one confirmation does not arrive, because one L2 cache can crash but the protocol will work
+      // When recovers it will update its value and be consistent.
+      //we use == and not >= to avoid resending of the confirmation
+      if (this.invalidConfirmations.get(msg.uuid).size() == (this.children.size() - Config.MAX_N_CACHE_CRASH)) {
         sendInvalidationConfirmation(msg);
       }
     }
   }
 
+  /**
+   * Service method to be called by both onInvalidationItemConfirmMsg and onInvalidationItemMsg to send a {@link InvalidationItemConfirmMsg}
+   * message.
+   * @param msg is the {@link InvalidationItemConfirmMsg} message to send.
+   */
   private void sendInvalidationConfirmation(InvalidationItemConfirmMsg msg){
     if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_SEND){
       crashingOps();
@@ -511,15 +534,16 @@ public class Cache extends AbstractActor {
     }
   }
 
+
   /**
-   * This method is used to handle the CritRefillMsg message. The CritRefillMsg message represent the ack of a critical write request.
-   * The cache will first check if the value is stored in its memory, in that case it will update it.
-   * Then it will remove the element from the list of the invalid ones, because it means that the DB has correctly updated the item.
-   * Then, if the cache is a L1 cache, it will simply forward the message to all its children.
-   * If the cache is a L2 cache, it will check if the originator of the request is one of its children.
-   * If yes the L2 cache will send the confirmation of the write operation to the client.
-   * The request is also removed from the list of the pending ones and the timer associated to the request is cancelled.
-   * @param msg is the RefillMsg message which contains the key of the updated item and the new value.
+   * This method is used to handle the arrival of a {@link CritRefillMsg} message.
+   * If the propagated item is in this cache memory, the value is updated. Then it will mark the element as valid.
+   * If this cache is a L1, the message is forwarded to all its children.
+   * Otherwise (the cache is L2) the method sends a {@link CritWriteConfirmMsg confirmation} to one of its child if it
+   * is the originator of associated {@link CritWriteReqMsg request}.
+   * The timer of the associated {@link InvalidationItemConfirmMsg invalidation confirm} is cancelled.
+   * The timer of the associated {@link CritWriteReqMsg request} is cancelled.
+   * @param msg the {@link CritRefillMsg} message which contains the key of the updated item and the new value.
    */
   private void onCritRefillMsg(CritRefillMsg msg) {
     if(this.nextCrash==CrashType.BEFORE_CRIT_REFILL){
@@ -571,6 +595,16 @@ public class Cache extends AbstractActor {
     }
   }
 
+  /**
+   * This method is used to handle the arrival of a {@link CritWriteErrorMsg} message.
+   * The item is marked as valid.
+   * If this cache is a L1, the message is forwarded to all its children.
+   * Otherwise (the cache is L2) the method sends the message to one of its child if it
+   * is the originator of associated {@link CritWriteReqMsg request}.
+   * The timer of the associated {@link InvalidationItemConfirmMsg invalidation confirm} is cancelled.
+   * The timer of the associated {@link CritWriteReqMsg request} is cancelled.
+   * @param msg the {@link CritWriteErrorMsg} message which contains the key of the updated item and the new value.
+   */
   private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
     Integer key = msg.key;
     if(this.invalidItems.contains(key)){
@@ -616,12 +650,12 @@ public class Cache extends AbstractActor {
   /* -- START OF crash handling message methods --------------------------------------------------------- */
 
   /**
-   * This method is used to handle the TimeoutMsg message which represent the timeout of a message and is used to detect a crash.
-   * A timeout message is sent after that a response to a request is not received in a given time. This message contains a copy of the request message.
-   * Only an L2 cache can go in timeout as we assume that the database cannot crash.
-   * If a L2 cache detect the crash of its L1 cache it will set the database as its new parent and will notify the databsase of the change asking to add the cache to the list of its child.
-   * Then it will remove the request to the list of the pending one and will notify, throw an ReqErrorMsg to the originator of the request that the request has failed.
-   * @param msg is the TimeoutMsg message which contains a copy of the request that has failed.
+   * This method is used to handle the arrival of a {@link TimeoutReqMsg} message.
+   * This is triggered in a L2 cache when it detects the crash of its parent while waiting for some response.
+   * The cache detecting the crash will set the {@link DB database} as its new parent and will notify the database of the change.
+   * Also, it will start refreshing the value of its saved items, because it could have old values.
+   * The cache will also notify the {@link Client originator} that its request has failed.
+   * @param msg the {@link TimeoutReqMsg} message which contains a copy of the request that has failed.
    */
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
@@ -639,7 +673,7 @@ public class Cache extends AbstractActor {
       ReqErrorMsg errMsg=new ReqErrorMsg(msg.awaitedMsg);
       if(msg.awaitedMsg instanceof CritReadReqMsg){
         ActorRef dest = ((CritReadReqMsg) msg.awaitedMsg).responsePath.pop();
-        // POSSIBLE REFACTOR TO REMOVE THE FACT THAT THE AWAITED REQUEST IS PASSED BY REFERENCE CAUSING THE RESPONSE PATH TO HAVE THE L2 CACHE ON TOP OF THE STACK
+
         if(dest.equals(getSelf())) // the response stack of the failed request contain on the top the cache itself so we need to pop 2 times in order to get the reference of the next hop
           dest = ((CritReadReqMsg) msg.awaitedMsg).responsePath.pop();
 
@@ -657,7 +691,7 @@ public class Cache extends AbstractActor {
         sendMessage(errMsg, originator);
       }else if(msg.awaitedMsg instanceof ReadReqMsg){
         ActorRef dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
-        // POSSIBLE REFACTOR TO REMOVE THE FACT THAT THE AWAITED REQUEST IS PASSED BY REFERENCE CAUSING THE RESPONSE PATH TO HAVE THE L2 CACHE ON TOP OF THE STACK
+
         if(dest.equals(getSelf())) // the response stack of the failed request contain on the top the cache itself so we need to pop 2 times in order to get the reference of the next hop
           dest = ((ReadReqMsg) msg.awaitedMsg).responsePath.pop();
 
@@ -677,11 +711,12 @@ public class Cache extends AbstractActor {
     }
   }
 
-  /**
-   * This method is used to refresh the saved items of the cache.
-   * This may be needed when the cache detect the crash of its L1 parent cache or when the L1 parent cache recover from a crash.
-   */
 
+  /**
+   * This method is used used to refresh the saved items of the cache.
+   * This is triggered in a L2 cache when it set the {@link DB database} as parent or when its L1 parent recovers before
+   * the this cache has noticed the crash.
+   */
   private void refreshItems(){
     LOGGER.debug("Cache " + this.id + "; refreshing_cache_using_parent: " + this.parent.path().name() + ";");
     for(int i : savedItems.keySet()){
@@ -701,12 +736,10 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the RefreshItemReqMsg message which represent the request to refresh an item in the cache.
-   * This message is sent from a L2 cache to a L1 cache when the latter recover from the crash.
-   * After the recovery, the L1 cache will lose all its saved items and will check which L2 cache is still its children.
-   * To this cache the L1 cache will ask to refresh the memory in order to ensure that they will have the latest value.
-   * In this way the L1 cache will be able also to restore its memory.
-   * @param msg
+   * This method is used to handle the arrival of a {@link RefreshItemReqMsg} message.
+   * This is triggered in a L1 cache when a child needs to request new values for its item.
+   * The message is forwarded to the {@link DB database} because we recover the last values.
+   * @param msg the {@link RefreshItemReqMsg} message contains the key of the element to be read from the database.
    */
   private void onRefreshItemReqMsg(RefreshItemReqMsg msg){
     if(this.nextCrash==CrashType.DURING_REFRESH){
@@ -719,11 +752,12 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the RefreshItemRespMsg message which represent the response to a request to refresh an item in the cache.
-   * This message may arrive from the DB to a L1 or L2 cache or from a L1 cache to a L2 cache.
-   * In the first case the L1 cache will update its memory with the value of the item and then will forward the message to the next hop which is one of its children.
-   * In the second case the L2 cache will update its memory with the value received but there won't be any next hop to forward the message.
-   * @param msg
+   * This method is used to handle the arrival of a {@link RefreshItemRespMsg} message.
+   * This message can come both from the DB or from a L1 (in a L2 cache).
+   * This cache stores the value in its memory. If this cache is an L1, it will forward the message to the child that is the
+   * originator of associated {@link RefreshItemReqMsg request}.
+   * The timer of the associated {@link RefreshItemReqMsg request} is cancelled.
+   * @param msg the {@link RefreshItemRespMsg} message which contains value of the requested item.
    */
   private void onRefreshItemRespMsg(RefreshItemRespMsg msg) {
     LOGGER.debug("Cache " + this.id + "; refreshing_item_in_cache: " + msg.key + "; setting_value: " + msg.value + "; refresh_completed;");
@@ -742,11 +776,9 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the RecoveryMsg message which is send by the main class of the program.
-   * After recovering the Cache will remove all its cached item and all its pending requests with the associated timer.
-   * Then it will check if the children are still its children, this is done by sending a IsStillParentReqMsg to each of its children.
-   * The behaviour of the cache is also restored to the normal behaviour.
-   * @param msg is the RecoveryMsg which is used to recover the crashed cache.
+   * This method is used to handle the arrival of a {@link RecoveryMsg} message.
+   * The next scheduled crash is sent to NONE and will ask its children if they are still children
+   * @param msg the {@link RecoveryMsg} message which is used to recover the crashed cache.
    */
   private void onRecoveryMsg(RecoveryMsg msg) {
     LOGGER.debug("Cache " + this.id + "; recovers;");
@@ -758,11 +790,10 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the IsStillParentReqMsg message which is received by a L1 cache.
-   * After that a L1 cache recover it needs to understand if its children are still its children or if they have detected its crash and changed their parents with the db.
-   * This method is triggered only by a L2 cache and when a L1 parent cache recover.
-   * If the L2 cache did not detect the cache of its parent it will notify that is still its children, otherwise it will notify that is not its children anymore.
-   * @param msg is the IsStillParentReqMsg which is used to notify if the cache is still a children of a L1 cache after that it has recover.
+   * This method is used to handle the arrival of a {@link IsStillParentReqMsg} message.
+   * This method is triggered in a L2 cache.
+   * If the sender (an L1 cache) is still its parent, this cache will respond affirmatively
+   * @param msg the {@link IsStillParentReqMsg} message used to ask if a L2 cache is still the child of a L1 cache
    */
   private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
     ActorRef sender = getSender();
@@ -776,12 +807,13 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle IsStillParentRespMsg message which is received by a L2 cache or a client.
-   * This message will notify to the cache if a node that was a child before the crash is still a child after the recovery
-   * If the response is false, that means the previous child has changed its parent and so it's not a child of the cache anymore
-   * If the message is true, that means the previous child is still a child (it has not detected the crash) and so we
-   * tell it to refresh all it's items, because it could have missed some refill message originated by clients not in its subtree
-   * @param msg is the IsStillParentRespMsg message which contains the answer to the IsStillParentReqMsg request.
+   * This method is used to handle the arrival of a {@link IsStillParentRespMsg} message.
+   * When this method is triggered in a L2 cache, the message is coming from a {@link Client}. It is removed (or not) from
+   * the list of children according to response.
+   * Otherwise (the cache is a L1) the message is coming from a L2. The L2 is removed (or not) from the list of children
+   * according to response. Plus, if L2 is still child of the L1, the L1 tells the L2 with a {@link StartRefreshMsg message}
+   * to refresh its items.
+   * @param msg the {@link IsStillParentRespMsg} message which contains the answer to the corrisponding {@link IsStillParentReqMsg request}
    */
   private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
     if (!msg.response){
@@ -796,10 +828,11 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to handle StartRefreshMsg message which is sent by a L1 cache
-   * This message will notify to a L2 cache that the L1 has recovered before L2 viewed the timeout
-   * The L2 cache starts to refill all its items, because it could have missed some refills
-   * @param msg is the StartRefreshMsg message.
+   * This method is used to handle the arrival of a {@link StartRefreshMsg} message.
+   * This method is triggered in a L2 cache. It starts to update the value of its saved items with the last value present
+   * in the system. The timers of all the pending requests are cancelled. Also, it notifies its children to cancel all
+   * the ongoing timers, to avoid the triggering of timeouts in clients.
+   * @param msg the {@link StartRefreshMsg} message that notifies the cache to start refreshing its items
    */
   private void onStartRefreshMsg(StartRefreshMsg msg){
     pendingReq.values().forEach(Cancellable::cancel);
@@ -817,8 +850,9 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * This method is used to change the behaviour of the cache to crashed.
-   * @param msg is the CrashMsg message which is sent by the main class and used to make crash a node.
+   * This method is used handle the arrival of a {@link CrashMsg} message.
+   * It schedules the next crash.
+   * @param msg is the {@link CrashMsg} message which is sent by the main class to make this cache to crash
    */
   private void onCrashMsg(CrashMsg msg){
     if(this.nextCrash == CrashType.NONE) {
@@ -830,6 +864,24 @@ public class Cache extends AbstractActor {
     }
   }
 
+  /**
+   * This method is used handle the arrival of a {@link CrashDuringMulticastMsg} message.
+   * It schedules the next crash that will be during a multicast.
+   * @param msg is the {@link CrashDuringMulticastMsg} message which is sent by the main class to make this cache to crash.
+   */
+  private void onCrashDuringMulticastMsg(CrashDuringMulticastMsg msg){
+    if(this.nextCrash == CrashType.NONE) {
+      this.nextCrash = msg.type;
+      this.afterNMessageSent = msg.afterNMessage;
+      this.recoveryAfter = msg.delay;
+    }
+  }
+
+  /**
+   * This method is used to perform all the operations related to a crash.
+   * It will clear all the instance data structures and cancel all the timers.
+   * Also it schedules the recovery of this cache.
+   */
   private void crashingOps(){
     LOGGER.debug("Cache " + this.id + "; is_now_crashed_for: " + this.recoveryAfter + " ms; ");
     pendingReq.values().forEach(Cancellable::cancel);
@@ -849,14 +901,6 @@ public class Cache extends AbstractActor {
     );                                    // source of the message (myself)
   }
 
-  private void onCrashDuringMulticastMsg(CrashDuringMulticastMsg msg){
-    if(this.nextCrash == CrashType.NONE) {
-      this.nextCrash = msg.type;
-      this.afterNMessageSent = msg.afterNMessage;
-      this.recoveryAfter = msg.delay;
-    }
-  }
-
   /* -- END OF crash handling message methods --------------------------------------------------------- */
 
 
@@ -864,9 +908,9 @@ public class Cache extends AbstractActor {
   /* -- BEGIN OF debug methods --------------------------------------------------------- */
 
   /**
-   * This methode is trigger when a InternalStateMsg is received and is used for debug.
-   * This methode will print the current state of the cache, so the saved item, the list of children and its parent
-   * @param msg is the InternalStateMsg message, is an empty message used to print the internal state of the cache.
+   * This method is triggered when a {@link InternalStateMsg} is received from the main class.
+   * This method is used for debugging. It will print the current state of the cache: the saved item, the list of children and the parent
+   * @param msg is the {@link InternalStateMsg} message, is an empty message used to print the internal state of the cache.
    */
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
@@ -890,7 +934,7 @@ public class Cache extends AbstractActor {
 
 
   /**
-   * Here we define the mapping between the received message types and our actor methods in the normal behaviour
+   * The mapping between the received message types and our actor methods in the normal behaviour
    */
   @Override
   public Receive createReceive() {
@@ -924,7 +968,7 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * Here we define the mapping between the received message types and our actor methods in the crashed behaviour
+   * The mapping between the received message types and our actor methods in the crashed behaviour
    */
   final AbstractActor.Receive crashed() {
     return receiveBuilder()
@@ -932,11 +976,4 @@ public class Cache extends AbstractActor {
             .matchAny(msg -> LOGGER.debug(getSelf().path().name() + " ignoring " + msg.getClass().getSimpleName() + " (crashed)"))
             .build();
   }
-
-  /*final AbstractActor.Receive crashedL1() {
-    return receiveBuilder()
-            .match(RecoveryL1Msg.class, this::onRecoveryL1Msg)
-            .matchAny(msg -> LOGGER.debug(getSelf().path().name() + " ignoring " + msg.getClass().getSimpleName() + " (crashed)"))
-            .build();
-  }*/
 }
