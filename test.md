@@ -844,13 +844,6 @@
     clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
 ```
 
-## Critical Write Crash N
-
-| Crash | CrashMsg | Description |
-|-------|----------|-------------|
-|       |          |             |
-
-
 
 
 # Main for random execution
