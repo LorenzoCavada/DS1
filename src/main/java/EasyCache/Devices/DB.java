@@ -52,9 +52,14 @@ public class DB extends AbstractActor {
    * @param dest is the actorRef of the destination actor
    */
   private void sendMessage(Message m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    dest.tell(m, getSelf());
+    int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
+    getContext().system().scheduler().scheduleOnce(
+            Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
+            dest,                                          // destination actor reference
+            m,                                  // the message to send
+            getContext().system().dispatcher(),                 // system dispatcher
+            getSelf()                                           // source of the message (myself)
+    );
   }
 
   /**

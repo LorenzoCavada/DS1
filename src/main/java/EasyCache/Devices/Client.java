@@ -57,15 +57,25 @@ public class Client extends AbstractActor {
    * @param m is the message to be sent to the parent
    */
   private void sendMessage(Message m){
-    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    parent.tell(m, getSelf());
+    int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
+    getContext().system().scheduler().scheduleOnce(
+            Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
+            parent,                                          // destination actor reference
+            m,                                  // the message to send
+            getContext().system().dispatcher(),                 // system dispatcher
+            getSelf()                                           // source of the message (myself)
+    );
   }
 
   private void sendMessage(Message m, ActorRef dest){
-    try { Thread.sleep(rnd.nextInt(Config.SEND_MAX_DELAY)); }
-    catch (InterruptedException e) { e.printStackTrace(); }
-    dest.tell(m, getSelf());
+    int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
+    getContext().system().scheduler().scheduleOnce(
+            Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
+            dest,                                          // destination actor reference
+            m,                                  // the message to send
+            getContext().system().dispatcher(),                 // system dispatcher
+            getSelf()                                           // source of the message (myself)
+    );
   }
 
   /* -- END OF Sending message methods ----------------------------------------------------- */
