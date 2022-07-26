@@ -844,20 +844,14 @@
     clientList.get(0).tell(new DoCritWriteMsg(1, 5), ActorRef.noSender());
 ```
 
-## Critical Write Crash N
-
-| Crash | CrashMsg | Description |
-|-------|----------|-------------|
-|       |          |             |
-
-
 
 
 # Main for random execution
 
 ```
-inputContinue();
+    inputContinue();
     InternalStateMsg internalState = new InternalStateMsg();
+    SupportMsg supMsg = new SupportMsg();
     Random rnd = new Random();
     int[] clients = {0,1,2,3,4,5,6,7};
     shuffleArray(clients, rnd);
@@ -901,13 +895,9 @@ inputContinue();
       }
       shuffleArray(clients, rnd);
       inputContinue(2000);
-    }
-
-
-    LOGGER.info("PRINT INTERNAL STATE");
-    l1List.forEach(l1 -> l1.tell(internalState, ActorRef.noSender()));
-    l2List.forEach(l2 -> l2.tell(internalState, ActorRef.noSender()));
-    system.terminate();
+      l1List.forEach(l1 -> l1.tell(supMsg, ActorRef.noSender()));
+      l2List.forEach(l2 -> l2.tell(supMsg, ActorRef.noSender()));
+      inputContinue(100);
 ```
 
 
