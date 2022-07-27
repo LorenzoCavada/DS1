@@ -4,11 +4,12 @@ import akka.actor.ActorRef;
 
 import java.util.Stack;
 
-// Represent the request of refreshing an item identify by the key.
-// The responsePath is a stack of actors that represent the path that the request has followed.
-// This message will be originated by a cache after a crash and needs to check if the value saved in himself needs to be updated
-// The L2 cache will push its actorRef into the stack and then send the message to the L1 cache.
-// The L1 cache will push its actorRef into the stack and then send the message to the DB.
+/**
+ * This message represents the request of refreshing an element identified by the key.
+ * ResponsePath is a stack of actors that are on the path that the request follows.
+ * It is performed by a L2 {@link EasyCache.Devices.Cache cache}, which will push its actorRef into the stack and then
+ * send the message to the L1 {@link EasyCache.Devices.Cache cache}.
+ */
 public class RefreshItemReqMsg extends ReadReqMsg {
 
     public RefreshItemReqMsg(int key) {

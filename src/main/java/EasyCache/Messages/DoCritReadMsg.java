@@ -1,9 +1,10 @@
 package EasyCache.Messages;
 
 
-// Sent to a client to trigger the critical read process.
-// This message specify the key of the item that the client need to read directly from the DB.
-// This message is used mostly for debug purposes.
+/**
+ * This message is sent by the {@link EasyCache.ProjectRunner runner} to a {@link EasyCache.Devices.Client client} to trigger a
+ * {@link CritReadReqMsg critical read request}. It is used like in {@link DoReadMsg}.
+ */
 public class DoCritReadMsg extends DoReadMsg {
 
     public DoCritReadMsg(int key) {

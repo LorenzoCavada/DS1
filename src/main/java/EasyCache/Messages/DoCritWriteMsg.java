@@ -1,8 +1,9 @@
 package EasyCache.Messages;
 
-// Sent to a client to trigger the write process.
-// This message specify the key of the item that the client need to write and the newValue to set to the item.
-// This message is used mostly for debug purposes.
+/**
+ * This message is sent by the {@link EasyCache.ProjectRunner runner} to a {@link EasyCache.Devices.Client client} to trigger a
+ * {@link CritWriteReqMsg critical write request}. It is used like in {@link DoWriteMsg}.
+ */
 public class DoCritWriteMsg extends DoWriteMsg {
 
     public DoCritWriteMsg(int key, int newValue) {

@@ -2,9 +2,10 @@ package EasyCache.Messages;
 
 import java.util.UUID;
 
-// Represent the confirmation of the write operation.
-// This will be originated by the L2 cache and sent to the client only if the L2 cache will see that the originator of the request is one of its children
-// This message is so originated after have received a RefillMsg and found the originator in the L2 cache's children list
+/**
+ * This message represents the confirmation of a successful {@link CritWriteReqMsg critical write request}.
+ * The message is used like in {@link WriteConfirmMsg}.
+ */
 public class CritWriteConfirmMsg extends WriteConfirmMsg{
     public CritWriteConfirmMsg(int key, UUID uuid) {
         super(key,uuid);

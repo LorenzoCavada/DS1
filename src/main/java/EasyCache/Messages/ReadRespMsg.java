@@ -6,7 +6,7 @@ import java.util.Stack;
 import java.util.UUID;
 
 /**
- * Represent the response of a reading request.
+ * Represent the response to a {@link ReadReqMsg read request}.
  * The response is sent by the {@link EasyCache.Devices.DB database} to the requester of the associated {@link ReadReqMsg request}
  * thanks to the ResponsePath stack, that contain the whole chain of actors that the request has crossed. The message contains both the key of the requested item and the value of the requested item
  */

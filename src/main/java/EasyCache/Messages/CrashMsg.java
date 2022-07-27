@@ -4,7 +4,7 @@ import EasyCache.Config;
 import EasyCache.CrashType;
 
 /**
- * This message is used to schedule the next crash in a {@link EasyCache.Devices.Cache cache}
+ * This message is used by the {@link EasyCache.ProjectRunner runner} to schedule the next crash in a {@link EasyCache.Devices.Cache cache}
  */
 public class CrashMsg extends Message {
     public CrashType type; //type of crash

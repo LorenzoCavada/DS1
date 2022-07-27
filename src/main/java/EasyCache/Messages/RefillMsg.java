@@ -4,9 +4,11 @@ import akka.actor.ActorRef;
 
 import java.util.UUID;
 
-// Represent the request of refilling the cache with a new element. Is initially sent by the server to the L1 cache after a write operation
-// Each L1 cache will then update its cache if the element is already saved in its cache, the L1 cache will then multicast the message to its children
-// Each L2 cache will then update its cache if the element is already saved in its cache, if the originator is one of its children, the L2 cache will send a confirmation to the originator
+/**
+ * This message is used to refill {@link EasyCache.Devices.Cache caches} with the new value of an element they already have saved during a {@link WriteReqMsg write}.
+ * It is initially sent by the {@link EasyCache.Devices.DB database} to its children after it applied the {@link WriteReqMsg write}.
+ * This message is ultimately propagated to all alive L2 {@link EasyCache.Devices.Cache caches}.
+ */
 public class RefillMsg extends IdMessage{
     public final int newValue; //new value of item
     public ActorRef originator;

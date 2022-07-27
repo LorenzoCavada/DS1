@@ -6,7 +6,7 @@ import java.util.Stack;
 import java.util.UUID;
 
 /**
- * Represent the request of reading critically the value of the element identified by the key. The message is used like in {@link ReadReqMsg}
+ * This message represents the request of reading critically the value of the element identified by the key. The message is used like in {@link ReadReqMsg}
  */
 public class CritReadReqMsg extends ReadReqMsg {
 
