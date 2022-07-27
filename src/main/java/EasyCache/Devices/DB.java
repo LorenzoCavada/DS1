@@ -1,5 +1,6 @@
 package EasyCache.Devices;
 
+import EasyCache.CacheType;
 import EasyCache.Config;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
@@ -14,23 +15,55 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * This cache represent the behaviour of the database.
+ */
 public class DB extends AbstractActor {
+  /**
+   * Used to generate random value.
+   */
   private Random rnd = new Random();
-  private List<ActorRef> children; // the list of children (L2 caches)
-  private final int id = -1;         // ID of the current actor
 
+  /**
+   * the list of children. At the beginning it is a list of L1 {@link Cache caches}. Then it could become a mixed list of
+   * L2 and L1 {@link Cache caches}.
+   */
+  private List<ActorRef> children;
+  /**
+   * numeric ID of the database.
+   */
+  private final int id = -1;
+
+  /**
+   * the full set of items in the system, as a map (key, value).
+   */
   private HashMap<Integer, Integer> items;
 
+  /**
+   * this map contains the set of children for which we have received a {@link InvalidationItemConfirmMsg} for a given
+   * {@link CritWriteReqMsg critical write request}, represent by its uuid.
+   */
   private Map<UUID, Set<ActorRef>> receivedInvalidAck;
 
+  /**
+   * map of all the critical write request for which we are waiting the {@link InvalidationItemConfirmMsg} with corresponding timer.
+   */
   private Map<UUID, Cancellable> invalidAckTimeouts;
 
-  private Map<UUID, CritWriteReqMsg> critWrites; //we need this data structure because crit write is composed of many messages
+  /**
+   * data structure containing the uuids of all ongoing {@link CritWriteReqMsg}, to easily send a {@link CritRefillMsg critical refill}
+   * after having received all the {@link InvalidationItemConfirmMsg invalid confirmations}.
+   */
+  private Map<UUID, CritWriteReqMsg> critWrites;
 
   private static final Logger LOGGER = LogManager.getLogger(DB.class);
 
   /* -- Actor constructor --------------------------------------------------- */
 
+  /**
+   * Constructor of the DB actor.
+   * @param items the set of items in the system.
+   */
   public DB(HashMap<Integer, Integer> items) {
     this.items=new HashMap<>();
     this.items.putAll(items);
@@ -47,9 +80,9 @@ public class DB extends AbstractActor {
   /* -- START OF Sending message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to send a message to a given actor, it will also simulate the network delays
-   * @param m is the message to send
-   * @param dest is the actorRef of the destination actor
+   * This method is used to send a {@link Message} to a given actor, simulating also a network delay.
+   * @param m the {@link Message} to send.
+   * @param dest the reference of the destination actor.
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
@@ -63,9 +96,9 @@ public class DB extends AbstractActor {
   }
 
   /**
-   * This method is used to send a message to all the children of the cache.
-   * The multicast will use Thread.sleep in order to simulate a network delay.
-   * @param m represents the message to be sent to the children.
+   * This method is used to send a {@link Message} to all the children of the cache.
+   * Will call sendMessage to send the {@link Message} to a child.
+   * @param m the {@link Message} to be sent to the children.
    */
   private void multicast(Message m) {
     for (ActorRef p: children) {
@@ -80,9 +113,8 @@ public class DB extends AbstractActor {
   /* -- START OF Configuration message methods ----------------------------------------------------- */
 
   /**
-   * This method is called when a SetChildrenMsg is received.
-   * This method is used to set the children of the DB when the system is created.
-   * @param msg is the SetChildrenMsg message which contains the list of children of the DB.
+   * This method is used to set the children of the database at the initialization of the tree.
+   * @param msg the {@link SetChildrenMsg} message which contain the list of children to set.
    */
   private void onSetChildrenMsg(SetChildrenMsg msg) {
     this.children = msg.children;
@@ -100,12 +132,10 @@ public class DB extends AbstractActor {
   /* -- START OF read and write message methods ----------------------------------------------------- */
 
   /**
-   * This method is called when a ReadReqMsg is received.
-   * The DB will get the ActorRef to which he needs to send the response by popping the first element of the responsePath contained in the request.
-   * The responsePath is the list of the ActorRefs that the message has gone through.
-   * Then the DB will get the requested item from its memory.
-   * After that it will create the response message and then send it.
-   * @param msg
+   * This method is used to handle the arrival of a {@link ReadReqMsg} message.
+   * The DB will create a {@link ReadRespMsg response} with the value associated to the requested key.
+   * The message will be sent to the child (a {@link Cache cache}) popped from responsePath object.
+   * @param msg the {@link ReadReqMsg} message which contains the key of the element to be read.
    */
   private void onReadReqMsg(ReadReqMsg msg) {
     ActorRef nextHop = msg.responsePath.pop();
@@ -116,13 +146,10 @@ public class DB extends AbstractActor {
   }
 
   /**
-   * This method is called when a CriticalReadReqMsg is received.
-   * The DB will get the ActorRef to which he needs to send the response by popping the first element of the responsePath contained in the request.
-   * The responsePath is the list of the ActorRefs that the message has gone through.
-   * Then the DB will get the requested item from its memory.
-   * After that it will create the response message and then send it.
-   * Actually is the same as a ReadReqMsg but the result of the read is inserted in a different message which trigger a different handling of the message.
-   * @param msg
+   * This method is used to handle the arrival of a {@link CritReadReqMsg} message.
+   * The DB will create a {@link CritReadRespMsg response} with the value associated to the requested key.
+   * The message will be sent to the child (a {@link Cache cache}) popped from responsePath object.
+   * @param msg the {@link CritReadReqMsg} message which contains the key of the element to be read.
    */
   private void onCritReadReqMsg(CritReadReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
@@ -133,11 +160,12 @@ public class DB extends AbstractActor {
   }
 
   /**
-   * This method is called when a CritWriteReqMsg is received.
-   * The DB will first ask all its children to invalidate the item object of the critical write request.
-   * Then it will wait the confirmation of invalidations from ALL its children
-   * It will also start a timer at the end of which will check if all the confirmations have been received.
-   * @param msg is the CritWriteReqMsg message which contains the key and the value to be updated.
+   * This method is used to handle the arrival of a {@link CritWriteReqMsg} message.
+   * The request is saved in the map of all the ongoing critical writes.
+   * The DB will first ask all the {@link Cache caches} to invalidate the item associated with the key of the {@link CritWriteReqMsg request}.
+   * Then it will wait the confirmation of invalidations from ALL its children. A timer is set for this purpose for detect a possible crash
+   * of one of its children and potentially going in timeout.
+   * @param msg the {@link CritWriteReqMsg} message which contains the key of the element to be read and the new value to set.
    */
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
     Integer key = msg.key;
@@ -161,6 +189,11 @@ public class DB extends AbstractActor {
     }
   }
 
+  /**
+   * Service method to check if there is an ongoing {@link CritWriteReqMsg critical write} on a item with a given key.
+   * @param key the key of the item we check for ongoing {@link CritWriteReqMsg critical writes}.
+   * @return {@code true} if there is an ongoing {@link CritWriteReqMsg critical write} on the item, {@code false} otherwise.
+   */
   private boolean isPerformingCritWriteOnItem(int key){
     boolean result = false;
     for(CritWriteReqMsg m : this.critWrites.values()){
@@ -172,14 +205,13 @@ public class DB extends AbstractActor {
     return result;
   }
 
-    /**
-     * This method is called when a InvalidationItemConfirmMsg is received.
-     * This message means that a children of the DB has correctly invalidated the item.
-     * After each confirmation the DB will check if all of its children has completed the invalidation process.
-     * If so, the DB will update the item and will send the CritRefillMsg to all its children.
-     * This message represent the end of the critical write process.
-     * @param msg
-     */
+  /**
+   * This method is used to handle the arrival of a {@link InvalidationItemConfirmMsg} message.
+   * The message means that a child of the DB has correctly invalidated the item.
+   * When ALL confirmations for a given {@link InvalidationItemMsg} are arrived, the DB will update the item and will send
+   * a {@link CritRefillMsg} to all its children.
+   * @param msg is the {@link InvalidationItemConfirmMsg} message which confirms that the sender has marked the item as invalid.
+   */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
     LOGGER.debug("DB " + this.id + "; invalidation_confirm_for_item: " + msg.key + "; from " + getSender().path().name() + "; MSG_ID: " + msg.uuid + ";");
     if(this.receivedInvalidAck.containsKey(msg.uuid)){
@@ -203,13 +235,14 @@ public class DB extends AbstractActor {
     }
   }
 
-    /**
-     * This method is called when a TimeoutInvalidAckMsg is received.
-     * This message means that a children of the DB has not completed the invalidation message in time.
-     * This means that the DB cannot ensure that all the cache will stop sending the old value to clients.
-     * In this case a critical write cannot be performed. So the DB will send a fail message to the originator of the critical write.
-     * @param msg
-     */
+  /**
+   * This method is used to handle the arrival of a {@link TimeoutInvalidAckMsg} message.
+   * This is triggered when the database detects the crash of one of its children while waiting for a {@link InvalidationItemConfirmMsg}.
+   * This means that the DB cannot ensure that all the cache will stop sending the old value to clients.
+   * Thus a critical write cannot be successful. The DB will send a {@link CritWriteErrorMsg} to the originator of the
+   * corresponding {@link CritWriteReqMsg critical write request}.
+   * @param msg is the {@link TimeoutInvalidAckMsg} message
+   */
   private void onTimeoutInvalidAckMsg(TimeoutInvalidAckMsg msg){
     UUID req = msg.awaitedMsg.uuid;
     StringBuilder sb = new StringBuilder();
@@ -242,9 +275,9 @@ public class DB extends AbstractActor {
   }
 
   /**
-   * This method is called when a WriteReqMsg is received.
-   * The DB will update the item with the new value and then will send a Refill message to all its children.
-   * @param msg is the WriteReqMsg message which contains the key and the value to be updated.
+   * This method is used to handle the arrival of a {@link WriteReqMsg} message.
+   * The DB will update the item with the new value and then will send a {@link RefillMsg} to all its children.
+   * @param msg the {@link WriteReqMsg} message which contains the key of the element to be updated and the new value.
    */
   private void onWriteReqMsg(WriteReqMsg msg){
     Integer key = msg.key;
@@ -261,10 +294,10 @@ public class DB extends AbstractActor {
   /* -- START OF crash handling message methods ----------------------------------------------------- */
 
   /**
-   * This methode is trigger when a AddChildMsg is received.
-   * This can happen when a L2 cache detects that its L1 parent cache has crashed and want to set the DB has its new parent.
-   * This cache needs to be added to the list of children of the DB.
-   * @param msg is the AddChildMsg message which contains the ActorRef of the new child.
+   * This method is used to add a new child to the database.
+   * This usually happen when a L2 {@link Cache} detect the crash of its parent (L1 {@link Cache}) and choose the database as parent.
+   * @param msg the {@link AddChildMsg} message which contains the reference to the new child to add to the list of the
+   * children of the database.
    */
   private void onAddChildMsg(AddChildMsg msg) {
     if (!this.children.contains(msg.child))
@@ -277,12 +310,12 @@ public class DB extends AbstractActor {
   }
 
   /**
-   * This method is called when a ReadReqMsg is received.
-   * The DB will get the ActorRef to which he needs to send the response by popping the first element of the responsePath contained in the request.
-   * The responsePath is the list of the ActorRefs that the message has gone through.
-   * Then the DB will get the requested item from its memory.
-   * After that it will create the response message and then send it.
-   * @param msg
+   * This method is used to handle the arrival of a {@link RefreshItemReqMsg} message.
+   * This is triggered by a L2 {@link Cache} when its L1 parent recovers from a crash or when a L2 {@link Cache} set the
+   * database as new parent.
+   * The DB will create a {@link RefreshItemRespMsg response} with the value associated to the requested key.
+   * The message will be sent to the child (a {@link Cache cache}) popped from responsePath object.
+   * @param msg the {@link RefreshItemReqMsg} message contains the key of the element to be read from the database.
    */
   private void onRefreshItemReqMsg(RefreshItemReqMsg msg){
     ActorRef nextHop = msg.responsePath.pop();
@@ -298,9 +331,9 @@ public class DB extends AbstractActor {
   /* -- START OF debug message methods ----------------------------------------------------- */
 
   /**
-   * This methode is trigger when a InternalStateMsg is received.
-   * This methode will print the current state of the cache, so the saved item and the list of children.
-   * @param msg
+   * This method is triggered when a {@link InternalStateMsg} is received from the {@link EasyCache.ProjectRunner runner}.
+   * This method is used for debugging. It will print the current state of the database: the items and the list of children.
+   * @param msg is the {@link InternalStateMsg} message, is an empty message used to print the internal state of the cache.
    */
   private void onInternalStateMsg(InternalStateMsg msg) {
     StringBuilder sb = new StringBuilder();
@@ -319,7 +352,7 @@ public class DB extends AbstractActor {
   /* -- END OF debug message methods ----------------------------------------------------- */
 
   /**
-   * Here we define the mapping between the received message types and our actor methods
+   * The mapping between the received message types and our actor methods in the normal behaviour.
    */
   @Override
   public Receive createReceive() {

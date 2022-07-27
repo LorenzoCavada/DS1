@@ -6,7 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * This message is used by the {@link EasyCache.ProjectRunner runner} to tell a {@link EasyCache.Devices.Client client} the list of available L2 {@link EasyCache.Devices.Cache caches}.
+ * This message is used by the {@link EasyCache.ProjectRunner runner} to tell a {@link EasyCache.Devices.Client client} the
+ * list of available L2 {@link EasyCache.Devices.Cache caches}.
  * The {@link EasyCache.Devices.Client client} will use this list to randomly select a new parent when its old parent crashes.
  */
 public class SetAvailableL2Msg extends Message {

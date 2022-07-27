@@ -1,5 +1,6 @@
 package EasyCache.Devices;
 
+import EasyCache.CacheType;
 import EasyCache.Config;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
@@ -16,18 +17,40 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 import scala.concurrent.duration.Duration;
 
+/**
+ * This cache represent the behaviour of a client.
+ */
 public class Client extends AbstractActor {
 
+  /**
+   * Used to generate random value.
+   */
   private Random rnd = new Random();
 
-  private final int id; // ID of the current actor
+  /**
+   * numeric ID of this client.
+   */
+  private final int id;
 
-  private ActorRef parent; //reference for parent
+  /**
+   * reference to the parent, a L2 {@link Cache}.
+   */
+  private ActorRef parent;
+  /**
+   * list of all the available L2 {@link Cache caches}. When a request goes in timeout, this client change parent through
+   * pick a L2 {@link Cache} at random from this list.
+   */
+  private List<ActorRef> availableL2;
 
-  private List<ActorRef> availableL2; //all the available L2 caches for timeout
+  /**
+   * map of all the pending request which are still waiting for a response, with the corresponding timer.
+   */
+  private final Map<UUID, Cancellable> pendingReq;
 
-  private final Map<UUID, Cancellable> pendingReq; // list of all the pending request which are still waiting for a response
-
+  /**
+   * Queue of all messages scheduled by the {@link EasyCache.ProjectRunner runner}, because a client could perform a new
+   * request only when the previous one has finished.
+   */
   private Queue<IdMessage> waitingReqs;
 
 
@@ -35,6 +58,10 @@ public class Client extends AbstractActor {
 
   /* -- Actor constructor --------------------------------------------------- */
 
+  /**
+   * Constructor of the Client actor.
+   * @param id the ID of constructed client.
+   */
   public Client(int id) {
     this.id = id;
     this.availableL2=new CopyOnWriteArrayList<>();
@@ -52,9 +79,8 @@ public class Client extends AbstractActor {
   /* -- START OF Sending message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to perform the actual send.
-   * The client can only communicate with its parent and the sleep function is used to simulate the network delay.
-   * @param m is the message to be sent to the parent
+   * This method is used to send a {@link Message} to the parent, a L2 {@link Cache}, simulating also a network delay.
+   * @param m the {@link Message} to send.
    */
   private void sendMessage(Message m){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
@@ -67,6 +93,11 @@ public class Client extends AbstractActor {
     );
   }
 
+  /**
+   * This method is used to send a {@link Message} to a given actor, simulating also a network delay.
+   * @param m the {@link Message} to send.
+   * @param dest the reference of the destination actor.
+   */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
     getContext().system().scheduler().scheduleOnce(
@@ -85,20 +116,18 @@ public class Client extends AbstractActor {
   /* -- START OF Configuration message methods ----------------------------------------------------- */
 
   /**
-   * This method is called when a SetParentMsg is received.
-   * It is used to set the parent of the client.
-   * @param msg is the SetParentMsg message which contains the L2 parent cache associated with the clients.
+   * This method is used to set the parent of the client at initialization.
+   * @param msg the {@link SetParentMsg} message which contains the reference to the L2 {@link Cache} to set.
    */
   private void onSetParentMsg(SetParentMsg msg) {
     this.parent=msg.parent;
     LOGGER.debug("Client " + this.id + "; parent_set_to: " + msg.parent.path().name() + ";");
   }
 
+
   /**
-   * This method is called when a SetAvailableL2Msg is received.
-   * It is used to set the available L2 caches of the client.
-   * This list will be used to choose a new L2 cache when the client detects the crash of the current one.
-   * @param msg is the SetAvailableL2Msg message which contains the available L2 caches.
+   * This method is used to set the list of available L2 {@link Cache caches}, at initialization.
+   * @param msg the {@link SetAvailableL2Msg} message which contains the {@link Set} of available L2 {@link Cache caches}.
    */
   private void onSetAvailL2Msg(SetAvailableL2Msg msg) {
     this.availableL2 = msg.availL2;
@@ -118,12 +147,11 @@ public class Client extends AbstractActor {
   /* -- START OF read and write message methods ----------------------------------------------------- */
 
   /**
-   * This method is called when a DoReadMsg is received.
-   * It is used to trigger the read process by providing the key of the item to read.
-   * Is used for debug purposes.
-   * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the read request.
-   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   * This method is used to handle the arrival of a {@link DoReadMsg} message.
+   * The message is sent by the {@link EasyCache.ProjectRunner runner} to schedule a new {@link ReadReqMsg}.
+   * If there is another ongoing request, this message is appended in a queue. Otherwise a {@link ReadReqMsg} is immediately
+   * performed.
+   * @param msg the {@link DoReadMsg} message which contains the key of the item to read.
    */
   private void onDoReadMsg(DoReadMsg msg){
     if (this.pendingReq.size()>0){
@@ -134,14 +162,13 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method will perform the actual read operation.
-   * First the client will create a ReadReqMsg and will push himself into the responsePath.
-   * Then it will send the ReadReqMsg to the parent node.
-   * The client will also add this request to the list of the pending one. in this way it will not send new request until this is finished.
-   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
-   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
-   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
-   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   * This method will perform the actual {@link ReadReqMsg read operation}.
+   * First the client will create a {@link ReadReqMsg}, pushing itself in the responsePath stack. Then it sends the
+   * {@link ReadReqMsg} to its parent.
+   * It add this request to pendingReq list, setting a timer to check for timeouts of upper layers nodes.
+   * By adding to the pendingReq list, it will not send new request until a corresponding {@link ReadRespMsg} or {@link TimeoutReqMsg}
+   * is received.
+   * @param msg the {@link DoReadMsg} message which contains the key of the item to read.
    */
   private void doReadReq(DoReadMsg msg) {
     ReadReqMsg msgToSend = new ReadReqMsg(msg.key, msg.uuid);
@@ -160,12 +187,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a ReadRespMsg is received.
-   * It is used to print the result of a read request.
-   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
-   * After printing the result, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
-   * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg ReadRespMsg message which contains the result of the read request.
+   * This method is used to handle arrival of a {@link ReadRespMsg} message.
+   * The method prints the result (the value) of a {@link ReadReqMsg read request}.
+   * The timer of the associated {@link ReadReqMsg request} is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link ReadRespMsg} message which contains value of the requested item.
    */
   private void onReadRespMsg(ReadRespMsg msg) {
     if(pendingReq.containsKey(msg.uuid)){
@@ -180,12 +206,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a DoReadMsg is received.
-   * It is used to trigger the read process by providing the key of the item to read.
-   * Is used for debug purposes.
-   * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the read request.
-   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   * This method is used to handle the arrival of a {@link DoCritReadMsg} message.
+   * The message is sent by the {@link EasyCache.ProjectRunner runner} to schedule a new {@link CritReadReqMsg}.
+   * If there is another ongoing request, this message is appended in a queue. Otherwise a {@link CritReadReqMsg} is immediately
+   * performed.
+   * @param msg the {@link DoCritReadMsg} message which contains the key of the item to read critically.
    */
   private void onDoCritReadMsg(DoCritReadMsg msg){
     if (this.pendingReq.size()>0){
@@ -196,14 +221,13 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method will perform the actual critical read operation.
-   * First the client will create a CritReadReqMsg and will push himself into the responsePath.
-   * Then it will send the CritReadReqMsg to the parent node.
-   * The client will also add this request to the list of the pending one. in this way it will not send new request until this is finished.
-   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
-   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
-   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
-   * @param msg is the DoReadMsg message which contains the key of the item to read.
+   * This method will perform the actual {@link CritReadReqMsg critical read operation}.
+   * First the client will create a {@link CritReadReqMsg}, pushing itself in the responsePath stack. Then it sends the
+   * {@link CritReadReqMsg} to its parent.
+   * It add this request to pendingReq list, setting a timer to check for timeouts of upper layers nodes.
+   * By adding to the pendingReq list, it will not send new request until a corresponding {@link CritReadRespMsg} or {@link TimeoutReqMsg}
+   * is received.
+   * @param msg the {@link DoCritReadMsg} message which contains the key of the item to read critically.
    */
   private void doCritRead(DoCritReadMsg msg) {
     CritReadReqMsg msgToSend = new CritReadReqMsg(msg.key, msg.uuid);
@@ -222,12 +246,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a CritReadRespMsg is received.
-   * It is used to print the result of a critical read request.
-   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
-   * After printing the result, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
-   * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg ReadRespMsg message which contains the result of the read request.
+   * This method is used to handle arrival of a {@link CritReadRespMsg} message.
+   * The method prints the result (the value) of a {@link CritReadRespMsg critical read request}.
+   * The timer of the associated {@link CritReadReqMsg request} is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link CritReadRespMsg} message which contains value of the requested item.
    */
   private void onCritReadRespMsg(CritReadRespMsg msg) {
     if(pendingReq.containsKey(msg.uuid)) {
@@ -242,12 +265,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a DoWriteMsg is received.
-   * It is used to trigger the write process by providing the key of the item to update and the newValue.
-   * Is used for debug purposes.
-   * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the doWriteReq method which will perform the actual write request.
-   * @param msg is the DoReadMsg message which contains the key of the item to update and the newValue.
+   * This method is used to handle the arrival of a {@link DoWriteMsg} message.
+   * The message is sent by the {@link EasyCache.ProjectRunner runner} to schedule a new {@link WriteReqMsg}.
+   * If there is another ongoing request, this message is appended in a queue. Otherwise a {@link WriteReqMsg} is immediately
+   * performed.
+   * @param msg the {@link DoWriteMsg} message which contains the key of the item to read and the new value to set.
    */
   private void onDoWriteMsg(DoWriteMsg msg){
     if(this.pendingReq.size()>0){
@@ -258,14 +280,13 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method will perform the actual write operation.
-   * First the client will create a WriteReqMsg specifying himself as originator.
-   * Then it will send the WriteReqMsg to the parent node.
-   * The client will also add this request to the list of the pending one. In this way it will not send new request until this is finished.
-   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
-   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
-   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
-   * @param msg is the DoWriteMsg message which contains the key of the item to write and the new value to set.
+   * This method will perform the actual {@link WriteReqMsg write operation}.
+   * First the client will create a {@link WriteReqMsg}, pushing itself in the responsePath stack. Then it sends the
+   * {@link WriteReqMsg} to its parent.
+   * It add this request to pendingReq list, setting a timer to check for timeouts of upper layers nodes.
+   * By adding to the pendingReq list, it will not send new request until a corresponding {@link WriteConfirmMsg} or {@link TimeoutReqMsg}
+   * is received.
+   * @param msg the {@link DoWriteMsg} message which contains the key of the item to write and the new value to set.
    */
   private void doWriteReq(DoWriteMsg msg){
     WriteReqMsg msgToSend = new WriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
@@ -282,12 +303,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a onWriteConfirmMsg is received.
-   * It is used to print the result of a write request.
-   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
-   * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
-   * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg is the WriteConfirmMsg message which contains the result of the write request.
+   * This method is used to handle arrival of a {@link WriteConfirmMsg} message.
+   * The method prints the acknowledgment of a successful {@link WriteReqMsg write request}.
+   * The timer of the associated {@link WriteReqMsg request} is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link WriteConfirmMsg} acknowledgment message of a successful {@link WriteReqMsg write request}.
    */
   private void onWriteConfirmMsg(WriteConfirmMsg msg){
     if(pendingReq.containsKey(msg.uuid)) {
@@ -302,12 +322,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a DoCritWriteMsg is received.
-   * It is used to trigger the critical write process by providing the key of the item to update and the newValue.
-   * Is used for debug purposes.
-   * First will check if there are some pending requests, if so it will add the request to the waiting list.
-   * If there are not pending requests, it will trigger the critical write method which will perform the actual request.
-   * @param msg is the DoCritWriteMsg message which contains the key of the item to update and the newValue.
+   * This method is used to handle the arrival of a {@link DoCritWriteMsg} message.
+   * The message is sent by the {@link EasyCache.ProjectRunner runner} to schedule a new {@link CritWriteReqMsg}.
+   * If there is another ongoing request, this message is appended in a queue. Otherwise a {@link CritWriteReqMsg} is immediately
+   * performed.
+   * @param msg the {@link DoCritWriteMsg} message which contains the key of the item to read and the new value to set.
    */
   private void onDoCritWriteMsg(DoCritWriteMsg msg){
     if(this.pendingReq.size()>0){
@@ -318,14 +337,13 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method will perform the actual critical write operation.
-   * First the client will create a CritWriteReqMsg specifying himself as originator.
-   * Then it will send the CritWriteReqMsg to the parent node.
-   * The client will also add this request to the list of the pending one. In this way it will not send new request until this is finished.
-   * Also it will start a timer. If the timer ends and no response has been received, the client will send to himself a TimeoutMsg
-   * This TimeoutMsg contains a copy of the request which did not receive a response in time.
-   * This TimeoutMsg will be used to handle the detection of the crash of the L2 cache.
-   * @param msg is the DoCritWriteMsg message which contains the key of the item to write and the new value to set.
+   * This method will perform the actual {@link CritWriteReqMsg write operation}.
+   * First the client will create a {@link CritWriteReqMsg}, pushing itself in the responsePath stack. Then it sends the
+   * {@link CritWriteReqMsg} to its parent.
+   * It add this request to pendingReq list, setting a timer to check for timeouts of upper layers nodes.
+   * By adding to the pendingReq list, it will not send new request until a corresponding {@link WriteConfirmMsg} or {@link TimeoutReqMsg}
+   * or {@link CritWriteErrorMsg} is received.
+   * @param msg the {@link DoCritWriteMsg} message which contains the key of the item to write and the new value to set.
    */
   private void doCritWriteReq(DoCritWriteMsg msg){
     CritWriteReqMsg msgToSend = new CritWriteReqMsg(msg.key, msg.uuid, msg.newValue, getSelf());
@@ -342,12 +360,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a CritWriteConfirmMsg is received.
-   * It is used to print the result of a critical write request.
-   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
-   * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
-   * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
+   * This method is used to handle arrival of a {@link CritWriteConfirmMsg} message.
+   * The method prints the acknowledgment of a successful {@link CritWriteReqMsg critical write request}.
+   * The timer of the associated {@link CritWriteReqMsg request} is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link CritWriteConfirmMsg} acknowledgment message of a successful {@link CritWriteReqMsg critical write request}.
    */
   private void onCritWriteConfirmMsg(CritWriteConfirmMsg msg){
     if(pendingReq.containsKey(msg.uuid)) {
@@ -362,12 +379,11 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is called when a CritWriteConfirmMsg is received.
-   * It is used to print the result of a critical write request.
-   * When receiving a response the client will also remove the timer associated with the request and will remove the request from the pending list.
-   * After printing the confirmation, the client will check if there are some requests which are waiting to be sent, in this case it will send the next request.
-   * This is done to ensure that a client will send a request only when the previous one is finished.
-   * @param msg is the CritWriteConfirmMsg message which contains the result of the critical write request.
+   * This method is used to handle arrival of a {@link CritWriteErrorMsg} message.
+   * The method prints the error associated to an unsuccessful {@link CritWriteReqMsg critical write request}.
+   * The timer of the associated {@link CritWriteReqMsg request} is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link CritWriteErrorMsg} error message of an unsuccessful {@link CritWriteReqMsg critical write request}.
    */
   private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
     if(pendingReq.containsKey(msg.uuid)) {
@@ -381,12 +397,14 @@ public class Client extends AbstractActor {
     }
   }
 
+
   /**
-   * This method is used to perform the next request in the waiting list.
-   * The message passed need to be casted in the right message in order to be sent.
-   * Due to the inheritance of the messages, the order of the cast is relevant, a DoCritReadMsg is indeed also a DoReadMsg.
-   * If we switch the order of the cast a DoCritReadMsg will be seen as a DoReadMsg and the client will send a normal read request instead then a critical one.
-   * @param msg is a ReqMessage which can be a DoReadMsg or a DoWriteMsg. This is why a cast is needed.
+   * This service method is used to perform the next request in the waiting list.
+   * The message passed need to be casted to the right message type before be sent. Due to the inheritance of
+   * this project, the order in which we check the instanceof is relevant.
+   * For example, if we switch the order of the instanceof, a {@link DoCritReadMsg} could be seen as a {@link DoReadMsg}
+   * and then the client will perform a {@link ReadReqMsg read request} instead of a {@link CritReadReqMsg critical read}.
+   * @param msg the {@link IdMessage doMessage} of the next request.
    */
   private void doNext(IdMessage msg){
     if(msg instanceof DoCritReadMsg){
@@ -401,11 +419,13 @@ public class Client extends AbstractActor {
   }
 
   /**
-   * This method is used to handle the ReqErrMsg message.
-   * This message is sent by the parent L2 cache when the request made from the client fail for some reason (i.e. crash of the parent of the L2 cache).
-   * After receiving this request the client will stop the timer associated to the request and remove it from the pending list.
-   * This is done because the parent of the client is still available so there is no reason to change the parent of the client.
-   * @param msg is the ReqErrMsg message sent by the parent L2 cache. It contains the uuid of the failed request
+   * This method is used to handle arrival of a {@link ReqErrorMsg} message.
+   * This message is sent by the parent L2 cache when the request made from the client fail for the crash of an upper L1 {@link Cache}
+   * or a request is performed for an item marked as invalid.
+   * The method prints the an appropriate error message.
+   * The timer of the associated request is cancelled.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link ReqErrorMsg} message sent by the parent L2 cache. It contains the uuid of the failed request.
    */
   private void onReqErrorMsg(ReqErrorMsg msg) {
     if(pendingReq.containsKey(msg.awaitedMsg.uuid)) {
@@ -421,6 +441,10 @@ public class Client extends AbstractActor {
     } else if (msg.awaitedMsg instanceof WriteReqMsg) {
       LOGGER.error("Client " + this.id + "; error_in_write_req: " + msg.awaitedMsg.uuid + "; for key: " + msg.awaitedMsg.key + "; value: " + ((WriteReqMsg) msg.awaitedMsg).newValue);
     }
+    if (!this.waitingReqs.isEmpty()){
+      IdMessage nextMsg=this.waitingReqs.remove();
+      doNext(nextMsg);
+    }
   }
 
   /* -- END OF read and write message methods ----------------------------------------------------- */
@@ -430,12 +454,11 @@ public class Client extends AbstractActor {
   /* -- START OF crash handling message methods ----------------------------------------------------- */
 
   /**
-   * This method is called when client goes in timeout.
-   * First the client will check if the request is still in the pending list, this is done to avoid some problem with Akka.
-   * If so it means that the response did not come in time and that means that the parent L2 cache can be considered crashed.
-   * First the client will choose a new parent L2 cache from the list of available ones.
-   * After choosing a new parent L2 cache, it will send a new message to the new parent to ask to be added as a child.
-   * @param msg is the TimeoutMsg message which contains the request that has gone in timeout.
+   * This method is used to handle the arrival of a {@link TimeoutReqMsg} message.
+   * This is triggered when this client detects the crash of its parent while waiting for some response.
+   * The client detecting the crash will set another L2 {@link Cache} as its new parent and will notify L2 {@link Cache} of the change.
+   * The method will also schedule the next request, if there are any in the waitingReqs list.
+   * @param msg the {@link TimeoutReqMsg} message which contains a copy of the request that has failed.
    */
   private void onTimeoutReqMsg(TimeoutReqMsg msg) {
     if (pendingReq.containsKey(msg.awaitedMsg.uuid)){
@@ -449,16 +472,19 @@ public class Client extends AbstractActor {
       AddChildMsg addMeMsg=new AddChildMsg(getSelf());
       sendMessage(addMeMsg);
       pendingReq.remove(msg.awaitedMsg.uuid);
+      if (!this.waitingReqs.isEmpty()){
+        IdMessage nextMsg=this.waitingReqs.remove();
+        doNext(nextMsg);
+      }
     }else{
       LOGGER.warn("Client " + this.id + "; timeout_but_received_response for: " + msg.awaitedMsg.key);
     }
   }
 
   /**
-   * This method is called when a IsStillParentReqMsg is received.
-   * the client will respond saying whether the sender is still its parent or not.
-   * This is done because the client may or may not have detected the crash of the L2 cache and so may or may not choose a different L2 cache.
-   * @param msg is the onIsStillParentReqMsg sent by the parent L2 cache after it recover from the crash.
+   * This method is used to handle the arrival of a {@link IsStillParentReqMsg} message.
+   * If the sender (a L2 {@link Cache cache}) is still its parent after recovery, this client will respond affirmatively.
+   * @param msg the {@link IsStillParentReqMsg} message used to ask if this client is still the child of a L2 {@link Cache cache}.
    */
   private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
     ActorRef sender = getSender();
@@ -471,6 +497,13 @@ public class Client extends AbstractActor {
     sendMessage(new IsStillParentRespMsg(response, msg.uuid), getSender());
   }
 
+  /**
+   * This method is used to handle the arrival of a {@link CancelTimeoutMsg} message.
+   * This message arrivies when an upper L1 {@link Cache} crashes and recovers before its child (L2 {@link Cache}) notices the crash.
+   * Removing the timers from the pendingReq list at client is needed to avoid a timeout of client (with subsequent change of parent)
+   * even if the parental L2 {@link Cache} has not crashed.
+   * @param msg the {@link CancelTimeoutMsg} message that contains the list of uuids of timers to cancel.
+   */
   private void onCancelTimeoutMsg(CancelTimeoutMsg msg) {
     for(UUID uuid : msg.uuids){
       if(pendingReq.containsKey(uuid)){
@@ -488,9 +521,9 @@ public class Client extends AbstractActor {
   /* -- START OF debug message methods ----------------------------------------------------- */
 
   /**
-   * This method is used only for debug to print the internal state of the client.
-   * It will print the id of the client and its parent.
-   * @param msg it is an empty message used only for debug.
+   * This method is triggered when a {@link InternalStateMsg} is received from the the {@link EasyCache.ProjectRunner runner}.
+   * This method is used for debugging. It will print the current state of the client: its id and its parent.
+   * @param msg is the {@link InternalStateMsg} message, is an empty message used to print the internal state of the cache.
    */
   private void onInternalStateMsg(InternalStateMsg msg) {
     LOGGER.debug("Client " + this.id + "; parent: " + this.parent.path().name());
@@ -499,7 +532,7 @@ public class Client extends AbstractActor {
   /* -- END OF debug message methods ----------------------------------------------------- */
 
   /**
-   * Here we define the mapping between the received message types and our actor methods
+   * The mapping between the received message types and our actor methods in the normal behaviour.
    */
   @Override
   public Receive createReceive() {

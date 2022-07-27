@@ -3,7 +3,7 @@ package EasyCache.Messages;
 import EasyCache.CrashType;
 
 /**
- * This message is used by the {@link EasyCache.ProjectRunner runner} to schedule the next crash during a multicast in a {@link EasyCache.Devices.Cache cache}
+ * This message is used by the {@link EasyCache.ProjectRunner runner} to schedule the next crash during a multicast in a {@link EasyCache.Devices.Cache cache}.
  */
 public class CrashDuringMulticastMsg extends CrashMsg {
     public int afterNMessage;

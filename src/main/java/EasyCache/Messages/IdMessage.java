@@ -5,7 +5,7 @@ import java.util.UUID;
 /**
  * Abstract class that identifies all messages with an {@link UUID uuid} and a key. Every message that needs an uuid subclass
  * from this class.
- * Thanks to the {@link UUID uuid}, we can chain and associate requests and connected responses
+ * Thanks to the {@link UUID uuid}, we can chain and associate requests and connected responses.
  */
 abstract public class IdMessage extends Message {
     public int key;

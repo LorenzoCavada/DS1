@@ -16,30 +16,75 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 import scala.concurrent.duration.Duration;
 
+/**
+ * This cache represent the behaviour of a cache.
+ */
 public class Cache extends AbstractActor {
 
-  private Random rnd = new Random(); // Used to generate random value
-  private ActorRef parent; // reference to the parent, may be a L1 Cache or the DB
+  /**
+   * Used to generate random value.
+   */
+  private Random rnd = new Random();
 
-  private ActorRef db; //reference to the db, used when changing parent to DB in a L2 cache
-  private List<ActorRef> children; // the list of children, they can be or a list of L2 caches (in L1 cache) or a list of Clients (in L2 cache)
-  private final int id; // ID of this actor
-  private final CacheType type; // type of the this cache, may be L1 or L2
-  private Map<UUID, Cancellable> pendingReq; // map of all the pending request which are still waiting for a response, with the corresponding timer
+  /**
+   * reference to the parent, may be a L1 {@link Cache} or the {@link DB}.
+   */
+  private ActorRef parent;
+  /**
+   * reference to the {@link DB}, used when changing parent to {@link DB} in a L2 {@link Cache}.
+   */
+  private ActorRef db;
+  /**
+   * the list of children, they can be or a list of L2 {@link Cache caches} (in L1 {@link Cache}) or a list of {@link Client clients} (in L2 {@link Cache}).
+   */
+  private List<ActorRef> children;
+  /**
+   * numeric ID of this cache.
+   */
+  private final int id;
+  /**
+   * type of the this cache, may be L1 or L2.
+   */
+  private final CacheType type;
 
-  private HashMap<Integer, Integer> savedItems; // the items saved in the cache
+  /**
+   * map of all the pending request which are still waiting for a response, with the corresponding timer.
+   */
+  private Map<UUID, Cancellable> pendingReq;
+  /**
+  * the items saved in the cache, as a map (key, value).
+  */
+  private HashMap<Integer, Integer> savedItems;
 
-  private Set<Integer> invalidItems; //items that are temporarily invalid while critical write is propagated
+  /**
+   * items that are temporarily invalid while critical write is propagated.
+   */
+  private Set<Integer> invalidItems;
+  /**
+   * map of all the critical write request for which we are waiting the refill with corresponding timer.
+   */
+  private Map<UUID, Cancellable> pendingUpdates;
+  /**
+   * in L1 {@link Cache caches}, this map contains the set of children for which we have received a {@link InvalidationItemConfirmMsg}
+   * for a given {@link CritWriteReqMsg critical write request}, represent by its uuid.
+   */
+  private Map<UUID, Set<ActorRef>> invalidConfirmations;
 
-  private Map<UUID, Cancellable> pendingUpdates; // map of all the critical write request for which we are waiting the refill
+  /**
+  * next scheduled {@link CrashType crash}.
+  */
+  private CrashType nextCrash;
 
-  private Map<UUID, Set<ActorRef>> invalidConfirmations; //in L1 cache, this map contains the set of children for which we have received a invalidItemConfirmationMsg
+  /**
+   * in case of next scheduled {@link CrashType crash} during a multicast, this parameter will tell after how many multicast a L1 {@link Cache cache} crashes.
+   */
+  private int afterNMessageSent;
 
-  private CrashType nextCrash; //next scheduled crash for this cache
-
-  private int afterNMessageSent; //in case of next scheduled crash during a multicast, this parameter will tell after how many multicast a L1 cache crashes
-
-  private int recoveryAfter; //in case of custom time of recovery (through the parameter in a crashmsg), the cache recovers after this amount of milliseconds
+  /**
+   * in case of custom time of recovery (through the parameter in {@link CrashMsg} or {@link CrashDuringMulticastMsg}),
+   * this cache recovers after this amount of milliseconds.
+   */
+  private int recoveryAfter;
 
   private static final Logger LOGGER = LogManager.getLogger(Cache.class); //the instance for the logger
   /* -- Actor constructor --------------------------------------------------- */
@@ -73,9 +118,9 @@ public class Cache extends AbstractActor {
   /* -- START OF Sending message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to send a {@link Message} to a given actor, simulating also a network delays
-   * @param m the {@link Message} to send
-   * @param dest the reference of the destination actor
+   * This method is used to send a {@link Message} to a given actor, simulating also a network delay.
+   * @param m the {@link Message} to send.
+   * @param dest the reference of the destination actor.
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
@@ -90,7 +135,7 @@ public class Cache extends AbstractActor {
 
   /**
    * This method is used to send a {@link Message} to all the children of the cache.
-   * Will call sendMessage to send the {@link Message} to a child
+   * Will call sendMessage to send the {@link Message} to a child.
    * @param m the {@link Message} to be sent to the children.
    */
   private void multicast(Message m) {
@@ -101,7 +146,7 @@ public class Cache extends AbstractActor {
 
   /**
    * This method is used to crash while sending a {@link Message} to all the children of the cache.
-   * Will call sendMessage to send the {@link Message} to a child
+   * Will call sendMessage to send the {@link Message} to a child.
    * @param m the {@link Message} to be sent to the children.
    */
   private void multicastAndCrash(Message m) {
@@ -123,7 +168,7 @@ public class Cache extends AbstractActor {
   /* -- START OF configuration message methods ----------------------------------------------------- */
 
   /**
-   * This method is used to set the children of the cache at the initialization of the tree
+   * This method is used to set the children of the cache at the initialization of the tree.
    * @param msg the {@link SetChildrenMsg} message which contain the list of children to set.
    */
   private void onSetChildrenMsg(SetChildrenMsg msg) {
@@ -137,7 +182,7 @@ public class Cache extends AbstractActor {
 
   /**
    * This method is used to add a new child to the cache.
-   * This usually happen when a {@link Client} detect the crash of its parent (L2 cache) and choose a new L2 cache as parent
+   * This usually happen when a {@link Client} detect the crash of its parent (L2 cache) and choose a new L2 cache as parent.
    * @param msg the {@link AddChildMsg} message which contains the reference to the new child to add to the list of the
    * children of this cache.
    */
@@ -478,13 +523,7 @@ public class Cache extends AbstractActor {
     }
   }
 
-  /**
-   * This method is used to handle the arrival of a {@link TimeoutUpdateCWMsg} message.
-   * This is triggered in a L2 cache when it detects the crash of its parent while waiting for a {@link CritRefillMsg critical refill}.
-   * The item becomes valid again.
-   *
-   * @param msg is the {@link TimeoutUpdateCWMsg} message
-   */
+
   private void onTimeoutUpdateCWMsg(TimeoutUpdateCWMsg msg){
     LOGGER.debug("Cache " + this.id + "; timeout_while_waiting_crit_refill_for_item: " + msg.awaitedMsg.key + "; MSG_ID: " + msg.awaitedMsg.uuid + "; removing_item_from_memory;");
     this.invalidItems.remove(msg.awaitedMsg.key);
@@ -497,7 +536,7 @@ public class Cache extends AbstractActor {
    * its children.
    * When this cache collects children.size() - MAX_N_CACHE_CRASH {@link InvalidationItemConfirmMsg confirmations} it sends
    * a {@link InvalidationItemConfirmMsg confirmation} to the {@link DB Database}.
-   * @param msg is the {@link InvalidationItemConfirmMsg} message which confirms that the sender has marked the item as invalid
+   * @param msg is the {@link InvalidationItemConfirmMsg} message which confirms that the sender has marked the item as invalid.
    */
   private void onInvalidationItemConfirmMsg(InvalidationItemConfirmMsg msg){
     if(this.nextCrash==CrashType.BEFORE_ITEM_INVALID_CONFIRM_RESP){
@@ -777,7 +816,7 @@ public class Cache extends AbstractActor {
 
   /**
    * This method is used to handle the arrival of a {@link RecoveryMsg} message.
-   * The next scheduled crash is sent to NONE and will ask its children if they are still children
+   * The next scheduled crash is sent to NONE and will ask its children if they are still children.
    * @param msg the {@link RecoveryMsg} message which is used to recover the crashed cache.
    */
   private void onRecoveryMsg(RecoveryMsg msg) {
@@ -792,8 +831,8 @@ public class Cache extends AbstractActor {
   /**
    * This method is used to handle the arrival of a {@link IsStillParentReqMsg} message.
    * This method is triggered in a L2 cache.
-   * If the sender (an L1 cache) is still its parent, this cache will respond affirmatively
-   * @param msg the {@link IsStillParentReqMsg} message used to ask if a L2 cache is still the child of a L1 cache
+   * If the sender (an L1 cache) is still its parent after recovery, this cache will respond affirmatively.
+   * @param msg the {@link IsStillParentReqMsg} message used to ask if a L2 cache is still the child of a L1 cache.
    */
   private void onIsStillParentReqMsg(IsStillParentReqMsg msg) {
     ActorRef sender = getSender();
@@ -813,7 +852,7 @@ public class Cache extends AbstractActor {
    * Otherwise (the cache is a L1) the message is coming from a L2. The L2 is removed (or not) from the list of children
    * according to response. Plus, if L2 is still child of the L1, the L1 tells the L2 with a {@link StartRefreshMsg message}
    * to refresh its items.
-   * @param msg the {@link IsStillParentRespMsg} message which contains the answer to the corrisponding {@link IsStillParentReqMsg request}
+   * @param msg the {@link IsStillParentRespMsg} message which contains the answer to the corrisponding {@link IsStillParentReqMsg request}.
    */
   private void onIsStillParentRespMsg(IsStillParentRespMsg msg){
     if (!msg.response){
@@ -832,7 +871,7 @@ public class Cache extends AbstractActor {
    * This method is triggered in a L2 cache. It starts to update the value of its saved items with the last value present
    * in the system. The timers of all the pending requests are cancelled. Also, it notifies its children to cancel all
    * the ongoing timers, to avoid the triggering of timeouts in clients.
-   * @param msg the {@link StartRefreshMsg} message that notifies the cache to start refreshing its items
+   * @param msg the {@link StartRefreshMsg} message that notifies the cache to start refreshing its items.
    */
   private void onStartRefreshMsg(StartRefreshMsg msg){
     pendingReq.values().forEach(Cancellable::cancel);
@@ -852,7 +891,7 @@ public class Cache extends AbstractActor {
   /**
    * This method is used handle the arrival of a {@link CrashMsg} message.
    * It schedules the next crash.
-   * @param msg is the {@link CrashMsg} message which is sent by the main class to make this cache to crash
+   * @param msg is the {@link CrashMsg} message which is sent by the main class to make this cache to crash.
    */
   private void onCrashMsg(CrashMsg msg){
     if(this.nextCrash == CrashType.NONE) {
@@ -908,7 +947,7 @@ public class Cache extends AbstractActor {
   /* -- BEGIN OF debug methods --------------------------------------------------------- */
 
   /**
-   * This method is triggered when a {@link InternalStateMsg} is received from the main class.
+   * This method is triggered when a {@link InternalStateMsg} is received from the {@link EasyCache.ProjectRunner runner}.
    * This method is used for debugging. It will print the current state of the cache: the saved item, the list of children and the parent
    * @param msg is the {@link InternalStateMsg} message, is an empty message used to print the internal state of the cache.
    */
@@ -934,7 +973,7 @@ public class Cache extends AbstractActor {
 
 
   /**
-   * The mapping between the received message types and our actor methods in the normal behaviour
+   * The mapping between the received message types and our actor methods in the normal behaviour.
    */
   @Override
   public Receive createReceive() {
@@ -968,7 +1007,7 @@ public class Cache extends AbstractActor {
   }
 
   /**
-   * The mapping between the received message types and our actor methods in the crashed behaviour
+   * The mapping between the received message types and our actor methods in the crashed behaviour.
    */
   final AbstractActor.Receive crashed() {
     return receiveBuilder()
