@@ -81,8 +81,8 @@ public class Cache extends AbstractActor {
   private int afterNMessageSent;
 
   /**
-   * in case of custom time of recovery (through the parameter in {@link CrashMsg} or {@link CrashDuringMulticastMsg}),
-   * this cache recovers after this amount of milliseconds.
+   * in case of crash, this cache recovers after this amount of milliseconds. It could be set through the parameter in a {@link CrashMsg}
+   * or {@link CrashDuringMulticastMsg} or with the default value in {@link Config}.
    */
   private int recoveryAfter;
 
