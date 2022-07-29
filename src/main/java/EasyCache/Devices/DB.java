@@ -95,15 +95,13 @@ public class DB extends AbstractActor {
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
-    int properDelay=delay;
     long thisTime=System.currentTimeMillis();
     if(lastDelayPerActor.containsKey(dest)){
       if(lastDelayPerActor.get(dest) > (thisTime- timeLastSendPerActor.get(dest))){
-        LOGGER.debug("DB " + this.id + "; Message: " + m.getClass().getSimpleName() + " last delay: " + lastDelayPerActor.get(dest) + " this delay: " + properDelay + " diff:" + (thisTime- timeLastSendPerActor.get(dest)));
         delay+= lastDelayPerActor.get(dest)-(thisTime- timeLastSendPerActor.get(dest));
       }
     }
-    this.lastDelayPerActor.put(dest, properDelay);
+    this.lastDelayPerActor.put(dest, delay);
     this.timeLastSendPerActor.put(dest, thisTime);
     getContext().system().scheduler().scheduleOnce(
             Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
