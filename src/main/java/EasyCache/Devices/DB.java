@@ -56,6 +56,15 @@ public class DB extends AbstractActor {
    */
   private Map<UUID, CritWriteReqMsg> critWrites;
 
+  /**
+   * Time of last sending of message. It is used to guarantee fifoness in sending messages.
+   */
+  private long timeLastSend;
+  /**
+   * Delay of last sent message. It is used to guarantee fifoness.
+   */
+  private int lastDelay;
+
   private static final Logger LOGGER = LogManager.getLogger(DB.class);
 
   /* -- Actor constructor --------------------------------------------------- */
@@ -70,6 +79,8 @@ public class DB extends AbstractActor {
     this.receivedInvalidAck=new HashMap<>();
     this.invalidAckTimeouts=new HashMap<>();
     this.critWrites =new HashMap<>();
+    this.timeLastSend=System.currentTimeMillis();
+    this.lastDelay=0;
   }
   static public Props props(HashMap<Integer, Integer> items) {
     return Props.create(DB.class, () -> new DB(items));
@@ -86,6 +97,11 @@ public class DB extends AbstractActor {
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
+    this.lastDelay=delay;
+    long thisTime=System.currentTimeMillis();
+    if (lastDelay > (thisTime-timeLastSend)){
+      delay+=lastDelay - (thisTime-timeLastSend);
+    }
     getContext().system().scheduler().scheduleOnce(
             Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
             dest,                                          // destination actor reference
@@ -93,6 +109,8 @@ public class DB extends AbstractActor {
             getContext().system().dispatcher(),                 // system dispatcher
             getSelf()                                           // source of the message (myself)
     );
+    this.timeLastSend=thisTime;
+
   }
 
   /**

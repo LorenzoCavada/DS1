@@ -86,6 +86,16 @@ public class Cache extends AbstractActor {
    */
   private int recoveryAfter;
 
+  /**
+   * Time of last sending of message. It is used to guarantee fifoness in sending messages.
+   */
+  private long timeLastSend;
+  /**
+   * Delay of last sent message. It is used to guarantee fifoness.
+   */
+  private int lastDelay;
+
+
   private static final Logger LOGGER = LogManager.getLogger(Cache.class); //the instance for the logger
   /* -- Actor constructor --------------------------------------------------- */
 
@@ -124,6 +134,11 @@ public class Cache extends AbstractActor {
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
+    this.lastDelay=delay;
+    long thisTime=System.currentTimeMillis();
+    if (lastDelay > (thisTime-timeLastSend)){
+      delay+=lastDelay - (thisTime-timeLastSend);
+    }
     getContext().system().scheduler().scheduleOnce(
             Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
             dest,                                          // destination actor reference
@@ -131,6 +146,7 @@ public class Cache extends AbstractActor {
             getContext().system().dispatcher(),                 // system dispatcher
             getSelf()                                           // source of the message (myself)
     );
+    this.timeLastSend=thisTime;
   }
 
   /**
