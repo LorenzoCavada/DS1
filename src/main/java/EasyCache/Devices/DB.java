@@ -1,6 +1,5 @@
 package EasyCache.Devices;
 
-import EasyCache.CacheType;
 import EasyCache.Config;
 import EasyCache.Messages.*;
 import akka.actor.AbstractActor;
@@ -11,7 +10,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.concurrent.duration.Duration;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -57,13 +55,13 @@ public class DB extends AbstractActor {
   private Map<UUID, CritWriteReqMsg> critWrites;
 
   /**
-   * Time of last sending of message. It is used to guarantee fifoness in sending messages.
+   * Time of last sending of message per children. It is used to guarantee fifoness in sending messages.
    */
-  private long timeLastSend;
+  private HashMap<ActorRef, Long> timeLastSendPerActor;
   /**
    * Delay of last sent message. It is used to guarantee fifoness.
    */
-  private int lastDelay;
+  private HashMap<ActorRef, Integer> lastDelayPerActor;
 
   private static final Logger LOGGER = LogManager.getLogger(DB.class);
 
@@ -79,8 +77,8 @@ public class DB extends AbstractActor {
     this.receivedInvalidAck=new HashMap<>();
     this.invalidAckTimeouts=new HashMap<>();
     this.critWrites =new HashMap<>();
-    this.timeLastSend=System.currentTimeMillis();
-    this.lastDelay=0;
+    this.timeLastSendPerActor =new HashMap<>();
+    this.lastDelayPerActor =new HashMap<>();
   }
   static public Props props(HashMap<Integer, Integer> items) {
     return Props.create(DB.class, () -> new DB(items));
@@ -97,11 +95,16 @@ public class DB extends AbstractActor {
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
-    this.lastDelay=delay;
+    int properDelay=delay;
     long thisTime=System.currentTimeMillis();
-    if (lastDelay > (thisTime-timeLastSend)){
-      delay+=lastDelay - (thisTime-timeLastSend);
+    if(lastDelayPerActor.containsKey(dest)){
+      if(lastDelayPerActor.get(dest) > (thisTime- timeLastSendPerActor.get(dest))){
+        LOGGER.debug("DB " + this.id + "; Message: " + m.getClass().getSimpleName() + " last delay: " + lastDelayPerActor.get(dest) + " this delay: " + properDelay + " diff:" + (thisTime- timeLastSendPerActor.get(dest)));
+        delay+= lastDelayPerActor.get(dest)-(thisTime- timeLastSendPerActor.get(dest));
+      }
     }
+    this.lastDelayPerActor.put(dest, properDelay);
+    this.timeLastSendPerActor.put(dest, thisTime);
     getContext().system().scheduler().scheduleOnce(
             Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
             dest,                                          // destination actor reference
@@ -109,7 +112,7 @@ public class DB extends AbstractActor {
             getContext().system().dispatcher(),                 // system dispatcher
             getSelf()                                           // source of the message (myself)
     );
-    this.timeLastSend=thisTime;
+
 
   }
 
@@ -188,7 +191,7 @@ public class DB extends AbstractActor {
   private void onCritWriteReqMsg(CritWriteReqMsg msg){
     Integer key = msg.key;
     if(!isPerformingCritWriteOnItem(msg.key)){
-      LOGGER.debug("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; sending_invalidation");
+      LOGGER.debug("DB " + this.id + "; crit_write_request_received_from: " + getSender().path().name() + "; for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; sending_invalidation");
       this.critWrites.put(msg.uuid, msg);
       InvalidationItemMsg invalidMsg=new InvalidationItemMsg(msg.key, msg.uuid);
       invalidAckTimeouts.put(msg.uuid,
@@ -201,7 +204,7 @@ public class DB extends AbstractActor {
               )); //adding the uuid of the message to the list of the pending ones
       multicast(invalidMsg);
     }else{
-      LOGGER.error("DB " + this.id + "; crit_write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; already_in_progress");
+      LOGGER.error("DB " + this.id + "; crit_write_request_received_from: " + getSender().path().name() + "; for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; already_in_progress");
       CritWriteErrorMsg resp = new CritWriteErrorMsg(msg.key, msg.originator, msg.uuid);
       multicast(resp);
     }
@@ -301,7 +304,7 @@ public class DB extends AbstractActor {
     Integer key = msg.key;
     items.put(key, msg.newValue);
     RefillMsg resp = new RefillMsg(key, msg.newValue, msg.originator, msg.uuid);
-    LOGGER.debug("DB " + this.id + "; write_request_received_for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; write_performed");
+    LOGGER.debug("DB " + this.id + "; write_request_received_from: " + getSender().path().name() + "; for_key: " + key + "; value: " + msg.newValue + "; MSG_ID: " + msg.uuid + "; write_performed");
     multicast(resp);
   }
 

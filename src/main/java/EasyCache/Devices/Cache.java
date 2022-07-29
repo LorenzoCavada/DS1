@@ -87,13 +87,13 @@ public class Cache extends AbstractActor {
   private int recoveryAfter;
 
   /**
-   * Time of last sending of message. It is used to guarantee fifoness in sending messages.
+   * Time of last sending of message per channel. It is used to guarantee fifoness in sending messages.
    */
-  private long timeLastSend;
+  private HashMap<ActorRef, Long> timeLastSendPerActor;
   /**
-   * Delay of last sent message. It is used to guarantee fifoness.
+   * Delay of last sent message per channel. It is used to guarantee fifoness.
    */
-  private int lastDelay;
+  private HashMap<ActorRef, Integer> lastDelayPerActor;
 
 
   private static final Logger LOGGER = LogManager.getLogger(Cache.class); //the instance for the logger
@@ -117,6 +117,8 @@ public class Cache extends AbstractActor {
     this.nextCrash=CrashType.NONE;
     this.afterNMessageSent=Integer.MAX_VALUE;
     this.recoveryAfter=-1;
+    this.timeLastSendPerActor =new HashMap<>();
+    this.lastDelayPerActor =new HashMap<>();
   }
 
   static public Props props(int id, CacheType type, ActorRef db) {
@@ -134,11 +136,16 @@ public class Cache extends AbstractActor {
    */
   private void sendMessage(Message m, ActorRef dest){
     int delay = rnd.nextInt(Config.SEND_MAX_DELAY);
-    this.lastDelay=delay;
+    int properDelay=delay;
     long thisTime=System.currentTimeMillis();
-    if (lastDelay > (thisTime-timeLastSend)){
-      delay+=lastDelay - (thisTime-timeLastSend);
+    if(lastDelayPerActor.containsKey(dest)){
+      if(lastDelayPerActor.get(dest) > (thisTime- timeLastSendPerActor.get(dest))){
+        LOGGER.debug("Cache " + this.id + "; Message: " + m.getClass().getSimpleName() + " last delay: " + lastDelayPerActor.get(dest) + " this delay: " + properDelay + " diff:" + (thisTime- timeLastSendPerActor.get(dest)));
+        delay+= lastDelayPerActor.get(dest)-(thisTime- timeLastSendPerActor.get(dest));
+      }
     }
+    this.lastDelayPerActor.put(dest, properDelay);
+    this.timeLastSendPerActor.put(dest, thisTime);
     getContext().system().scheduler().scheduleOnce(
             Duration.create(delay, TimeUnit.MILLISECONDS),        // when to send the message
             dest,                                          // destination actor reference
@@ -146,7 +153,6 @@ public class Cache extends AbstractActor {
             getContext().system().dispatcher(),                 // system dispatcher
             getSelf()                                           // source of the message (myself)
     );
-    this.timeLastSend=thisTime;
   }
 
   /**
