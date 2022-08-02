@@ -387,7 +387,7 @@ public class Client extends AbstractActor {
    */
   private void onCritWriteErrorMsg(CritWriteErrorMsg msg){
     if(pendingReq.containsKey(msg.uuid)) {
-      LOGGER.error("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; crit_write_error; timeout_canceled;");
+      LOGGER.error("Client " + this.id + "; crit_write_response_for_item: " + msg.key + "; crit_write_error; timeout_cancelled;");
       pendingReq.get(msg.uuid).cancel();
       pendingReq.remove(msg.uuid);
     }

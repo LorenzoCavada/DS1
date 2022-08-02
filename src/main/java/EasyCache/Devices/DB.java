@@ -44,7 +44,7 @@ public class DB extends AbstractActor {
   private Map<UUID, Set<ActorRef>> receivedInvalidAck;
 
   /**
-   * map of all the critical write request for which we are waiting the {@link InvalidationItemConfirmMsg} with corresponding timer.
+   * map of all the critical write request for which we are waiting some {@link InvalidationItemConfirmMsg} with corresponding timer.
    */
   private Map<UUID, Cancellable> invalidAckTimeouts;
 
@@ -271,25 +271,25 @@ public class DB extends AbstractActor {
       }
     }
     LOGGER.warn("DB " + this.id + "; invalidation_confirm_timeout_for_item: " + msg.awaitedMsg.key + "; waiting_for: " + sb + "; ");
-    CritWriteReqMsg associatedReq=this.critWrites.get(msg.awaitedMsg.uuid);
+    CritWriteReqMsg associatedReq=this.critWrites.get(req);
     //check for akka bugs
-    if(this.receivedInvalidAck.get(msg.awaitedMsg.uuid).size()==this.children.size()){
-      this.invalidAckTimeouts.get(msg.awaitedMsg.uuid).cancel();
+    if(this.receivedInvalidAck.get(req).size()==this.children.size()){
+      this.invalidAckTimeouts.get(req).cancel();
       items.put(associatedReq.key, associatedReq.newValue);
       CritRefillMsg resp = new CritRefillMsg(associatedReq.key, associatedReq.newValue, associatedReq.originator, associatedReq.uuid);
       LOGGER.debug("DB " + this.id + "; crit_write_performed_for_key: " + associatedReq.key + "; value: " + associatedReq.newValue + "; MSG_ID: " + associatedReq.uuid + ";");
       multicast(resp);
-      this.critWrites.remove(msg.awaitedMsg.uuid);
-      this.receivedInvalidAck.get(msg.awaitedMsg.uuid).clear();
-      this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
-      this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
+      this.critWrites.remove(req);
+      this.receivedInvalidAck.get(req).clear();
+      this.receivedInvalidAck.remove(req);
+      this.invalidAckTimeouts.remove(req);
     }else{
       LOGGER.debug("DB " + this.id + "; crit_write_error_for_key: " + msg.awaitedMsg.key + "; MSG_ID: " + associatedReq.uuid + "; sending_error;");
       CritWriteErrorMsg resp = new CritWriteErrorMsg(associatedReq.key, associatedReq.originator, associatedReq.uuid);
       multicast(resp);
-      this.critWrites.remove(msg.awaitedMsg.uuid);
-      this.receivedInvalidAck.remove(msg.awaitedMsg.uuid);
-      this.invalidAckTimeouts.remove(msg.awaitedMsg.uuid);
+      this.critWrites.remove(req);
+      this.receivedInvalidAck.remove(req);
+      this.invalidAckTimeouts.remove(req);
     }
   }
 
