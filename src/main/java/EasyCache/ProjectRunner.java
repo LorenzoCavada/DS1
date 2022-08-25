@@ -72,32 +72,34 @@ public class ProjectRunner {
     List<CopyOnWriteArrayList<ActorRef>> partitionsClient = new ArrayList<>();
     List<CopyOnWriteArrayList<ActorRef>> partitionsL2 = new ArrayList<>();
 
-
+    //partition of the list of client. It could create more partitions that the number of L2 Cache
     for(int i = 0; i < Config.N_CLIENT;i+=partitionClientSize){
       CopyOnWriteArrayList<ActorRef> theList=new CopyOnWriteArrayList<>();
       theList.addAll(clientList.subList(i, Math.min(i+partitionClientSize, Config.N_CLIENT)));
       partitionsClient.add(theList);
     }
 
+    //all the clients are divided in the same number of sets as the number of L2 cache
     ListIterator<CopyOnWriteArrayList<ActorRef>> iter1C=partitionsClient.listIterator(Config.N_L2);
     ListIterator<CopyOnWriteArrayList<ActorRef>> iter2C=partitionsClient.listIterator();
-
     while(iter1C.hasNext()){
       iter2C.next().addAll(iter1C.next());
     }
 
+    //partition of the list of L2_caches. It could create more partitions that the number of L1 Cache
     for(int i = 0; i < Config.N_L2; i+= partitionL2Size){
       CopyOnWriteArrayList<ActorRef> theList=new CopyOnWriteArrayList<>();
       theList.addAll(l2List.subList(i, Math.min(i + partitionL2Size, Config.N_L2)));
       partitionsL2.add(theList);
     }
 
+    //all the L2 caches are divided in the same number of sets as the number of L1 cache
     ListIterator<CopyOnWriteArrayList<ActorRef>> iter1_L2=partitionsL2.listIterator(Config.N_L1);
     ListIterator<CopyOnWriteArrayList<ActorRef>> iter2_L2=partitionsL2.listIterator();
-
     while(iter1_L2.hasNext()){
       iter2_L2.next().addAll(iter1_L2.next());
     }
+
 
     //we set parent and children of L1 caches
     //at the same time, we set the L1 cache as parent of the corresponding L2 children
